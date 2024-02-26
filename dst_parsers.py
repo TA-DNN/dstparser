@@ -181,7 +181,7 @@ def parse_sdwaveform(sdwaveform_list_str):
                 [sdwaveform_list[i][j + k * (3 + 128 * 2)] for j in range(3 + 128 * 2)]
                 for k in range(len(sdwaveform_list[i]) // (3 + 128 * 2))
             ]
-        )
+        ).transpose()
         for i in range(len(sdwaveform_list))
     ]
 
@@ -214,10 +214,10 @@ def parse_badsdinfo(badsdinfo_list_str):
     ]
     # badsdinfo_set = {tuple(row) for row in badsdinfo_list}
     badsdinfo_set_list = [{e for e in sublist} for sublist in badsdinfo_list]
-    print("badsdinfo_list")
-    print(badsdinfo_list)
-    input()
-    print(badsdinfo_set_list)
+    # print("badsdinfo_list")
+    # print(badsdinfo_list)
+    # input()
+    # print(badsdinfo_set_list)
     return badsdinfo_list
 
 

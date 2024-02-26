@@ -4,6 +4,7 @@ from dst_content import dst_content
 from dst_parsers import dst_sections, shower_params
 from dst_parsers import parse_sdmeta, parse_sdwaveform, parse_badsdinfo
 from dst_parsers import init_detector_tile
+from utils import  rufptn_xxyy2sds, find_pos, tile_positions
 
 dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/DAT000015_gea.dat.hrspctr.1850.specCuts.dst.gz"
 
@@ -46,8 +47,8 @@ for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
 
     print(event.shape, wform.shape)
     print(event[0])
-    print(wform[:, 0])
-    wform_xy = wform[:, 0].astype(np.int32)
+    print(wform[0])
+    wform_xy = wform[0].astype(np.int32)
 
     # Number of indecies of waveforms
     # corresponding to specific detector with index idetector
@@ -79,7 +80,7 @@ for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
     # print(idetectors)
     # print(wform_idx[list(idetectors)][0])
     # input()
-    wform = wform[wform_idx, 3:]
+    wform = wform[3:,wform_idx]
 
     # print(wform.shape)
     # print(event.shape)
@@ -88,10 +89,22 @@ for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
     # ix and iy as one array [ix, iy]
     ixy = np.array([event[0] // 100, event[0] % 100])
 
+    # print(ixy)
     # center around detector with max signal
     max_signal_idx = np.argmax((event[4] + event[5]) / 2)
-    ixy -= ixy[:, max_signal_idx][:, np.newaxis]
-
+    
+    # Indicies of central detector
+    ixy0 = ixy[:, max_signal_idx]
+    detector_tile["detector_positions"][ievt] = tile_positions(ixy0, nTile)
+    
+    # print(detector_tile["detector_positions"][ievt, 0, 0])
+    # print(detector_tile["detector_positions"][ievt, 6, 6])
+    # input()
+    
+    ixy -= ixy0[:, np.newaxis]
+    
+    # print(ixy)
+    # input()
     # cut array size to fit the tile size
     inside_tile = (abs(ixy[0]) < tile_size) & (abs(ixy[0]) < tile_size)
     ixy = ixy[:, inside_tile].astype(np.int32)
@@ -102,15 +115,27 @@ for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
     atimes -= np.min(atimes)
 
     print(atimes.shape)
-    print(arrival_times.shape)
+    print(detector_tile["arrival_times"].shape)
+    print(f"ixy.shape = {ixy.shape}")
+    print(f"wform.shape = {wform.shape}")
 
-    arrival_times[ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
+    detector_tile["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
 
-    # wtr = wform.transpose()
-    test = wform[:, :128] / event[9] + wform[:, 128:] / event[10]
+    ttrace = (wform[:128] / event[9] + wform[128:] / event[10])/2
+    detector_tile["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+    
+    # print(detector_tile["time_traces"][ievt])
 
-    print(test.shape)
-    input()
+    # print(f"test.shape = {test.shape}")
+    # ddd = detector_tile["time_traces"][ievt, ixy[0], ixy[1],:]
+    # print(f"test.shape = {ddd.shape}")
+    # # print(test.shape)
+    # detector_tile["detector_positions"][ievt, ixy[0], ixy[1]] = find_pos(event[0])
+    # print(detector_tile["detector_positions"][ievt, 0, :])
+    # input()
+    # res = rufptn_xxyy2sds(event[0]) / 100
+    # print(res)
+    # input()
 
     # time_traces[ievt, ixy[0], ixy[1], :] = wforrm[:128]
 
@@ -118,7 +143,7 @@ for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
     #             fadc_low / sdmeta_list[i][j][9] + fadc_up / sdmeta_list[i][j][10]
     #         ) / 2
 
-    input()
+    # input()
     # xx = int(str(int(sdmeta_list[i][j][0])).zfill(4)[:2])
     #     yy = int(str(int(sdmeta_list[i][j][0])).zfill(4)[2:])
     #     xGrid = int(-ix[max_signal_idx] + ix + tile_shift)
@@ -126,5 +151,5 @@ for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
 
 
 
-elapsed_time = end_time - start_time
-print(f"Elapsed Time: {elapsed_time} seconds, total events: %d" % (len(event_list)))
+# elapsed_time = end_time - start_time
+# print(f"Elapsed Time: {elapsed_time} seconds, total events: %d" % (len(event_list)))
