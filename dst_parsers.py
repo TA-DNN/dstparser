@@ -284,7 +284,6 @@ def detector_readings(sdmeta_list, sdwaveform_list, detector_tile):
         
         # Return detector coordinates of the tile centered in ixy0
         detector_tile["detector_positions"][ievt] = tile_positions(ixy0, nTile)
-        print(detector_tile["detector_states"].shape)
         detector_tile["detector_states"][:,:,:] = True
         
         return detector_tile
