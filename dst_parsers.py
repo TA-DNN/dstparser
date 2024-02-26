@@ -1,5 +1,6 @@
 import numpy as np
 from utils import rufptn_xxyy2sds
+from utils import tile_positions
 
 
 def dst_sections(dst_string):
@@ -221,11 +222,8 @@ def parse_badsdinfo(badsdinfo_list_str):
     return badsdinfo_list
 
 
-def init_detector_tile(num_events):
-
+def init_detector_tile(num_events, nTile, nTimeTrace):
     # Put largest-signal SD at the center of nTile x nTile grids
-    nTile = 7  # number of SD per one side
-    nTimeTrace = 128  # number of time trace of waveform
     shape = num_events, nTile, nTile
     detector_tile = dict()
     detector_tile["arrival_times"] = np.zeros(shape, dtype=np.float32)
@@ -235,7 +233,63 @@ def init_detector_tile(num_events):
     return detector_tile
 
 
+def cut_events(event, wform, min_ndet):
+    # Events with > 2 detectors
+    event = event[:, event[1] > min_ndet]
+
+    # Pick corresponding waveforms
+    wform_idx = []
+    for xycoord in event[0].astype(np.int32):
+        # Take only the first waveform (second [0])
+        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
+
+    wform = wform[3:, wform_idx]
+    return event, wform
+
+
+def center_tile(event, tile_size):      
+    # center around detector with max signal
+    max_signal_idx = np.argmax((event[4] + event[5]) / 2)
+    
+    # ix and iy as one array [ix, iy]
+    ixy = np.array([event[0] // 100, event[0] % 100]).astype(np.int32)
+    # Indicies of central detector ix0, iy0
+    ixy0 = ixy[:, max_signal_idx]
+    ixy -= ixy0[:, np.newaxis]
+    # cut array size to fit the tile size
+    inside_tile = (abs(ixy[0]) < tile_size) & (abs(ixy[1]) < tile_size)
+    ixy = ixy[:, inside_tile]
+    return ixy0, inside_tile, ixy 
+
+
 def detector_readings(sdmeta_list, sdwaveform_list, detector_tile):
+    to_nsec = 4 * 1000
+    nTile = detector_tile["time_traces"].shape[1]
+    nTimeTrace = detector_tile["time_traces"].shape[3]
+    tile_size = (nTile - 1) / 2 + 1
+    
+    for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
+    
+        event, wform = cut_events(event, wform, 2)
+        ixy0, inside_tile, ixy = center_tile(event, tile_size)
+
+        # averaged arrival times
+        atimes = (event[2] + event[3]) / 2
+        # relative time of first arrived particle
+        atimes -= np.min(atimes)
+        detector_tile["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
+
+        ttrace = (wform[:nTimeTrace] / event[9] + wform[nTimeTrace:] / event[10])/2
+        detector_tile["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+        
+        # Return detector coordinates of the tile centered in ixy0
+        detector_tile["detector_positions"][ievt] = tile_positions(ixy0, nTile)
+        print(detector_tile["detector_states"].shape)
+        detector_tile["detector_states"][:,:,:] = True
+        
+        return detector_tile
+
+def detector_readings_orig(sdmeta_list, sdwaveform_list, detector_tile):
 
     nTile = detector_tile["arrival_times"].shape[1]
 
