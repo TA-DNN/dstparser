@@ -1,3 +1,5 @@
+## Test init_development 240226
+
 import os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -200,15 +202,10 @@ for i in range(len(sdmeta_list)):
             detector_positions[i][xGrid][yGrid][1] = sd_clf[2]
             detector_positions[i][xGrid][yGrid][2] = sd_clf[3]
             detector_states[i][xGrid][yGrid] = True
-#print(sdmeta_list[0][0][6])
-#print(sdmeta_list[0][0][7])
-#print(sdmeta_list[0][0][8] * 1.2/100)
-#print("firstTime:",firstTime)
-#print(arrival_times[0])
 
 end_time = time.time()
 
-# 経過時間を表示
+# print calculation time
 elapsed_time = end_time - start_time
 print(f"Elapsed Time: {elapsed_time} seconds, total events: %d"%(len(event_list)))
 
