@@ -16,6 +16,7 @@ def fill_metadata(data, dst_file):
     data["metadata"] = json.dumps(meta_data, indent=4)
     return data
 
+
 def dst_sections(dst_string):
     ## make lists
     event_readout = False
@@ -26,7 +27,7 @@ def dst_sections(dst_string):
     sdmeta_list_str = []
     sdwaveform_list_str = []
     badsdinfo_list_str = []
-    
+
     for il, line in enumerate(dst_string):
         if "EVENT DATA" in line:
             event_readout = True
@@ -86,11 +87,11 @@ def shower_params(event_list_str, data):
     data["energy"] = event_list[1]
     data["xmax"] = np.zeros(event_list.shape[1], dtype=np.float32)
     data["shower_axis"] = np.array(
-            [
-                np.sin(event_list[2]) * np.cos(event_list[3]),
-                np.sin(event_list[2]) * np.sin(event_list[3]),
-                np.cos(event_list[2]),
-            ],
+        [
+            np.sin(event_list[2]) * np.cos(event_list[3]),
+            np.sin(event_list[2]) * np.sin(event_list[3]),
+            np.cos(event_list[2]),
+        ],
         dtype=np.float32,
     ).transpose()
 
@@ -216,16 +217,49 @@ def parse_sdwaveform(sdwaveform_list_str):
 
 
 def parse_badsdinfo(badsdinfo_list_str):
-    badsdinfo_list = [
-        [int(c) for c in l.split(" ") if c != ""] for l in badsdinfo_list_str
-    ]
-    # badsdinfo_list = [[[badsdinfo_list[i][j+k*2] for j in range(2)] for k in range(len(badsdinfo_list[i])//2)] for i in range(len(badsdinfo_list))]
-    badsdinfo_list = [
-        [badsdinfo_list[i][k * 2] for k in range(len(badsdinfo_list[i]) // 2)]
-        for i in range(len(badsdinfo_list))
-    ]
-    # badsdinfo_set = {tuple(row) for row in badsdinfo_list}
-    badsdinfo_set_list = [{e for e in sublist} for sublist in badsdinfo_list]
+
+    badsdinfo_list = []
+    for ii in badsdinfo_list_str:
+        # print(ii)
+        numpy_array = np.fromstring(ii, sep=" ", dtype=np.int32)
+        xxyyout = np.unique(numpy_array[::2])
+        # bitfout = numpy_array[1::2]
+        badsdinfo_list.append(xxyyout)
+        # print(xxyyout)
+        # print(bitfout)
+        # print(xxyyout.shape)
+        # print(bitfout.shape)
+        # print(np.unique(xxyyout).shape)
+        # input()
+
+    #     Int_t nsdsout;         // number of SDs either completely out (absent in the live detector list during event)
+    #   vector<Int_t> xxyyout; // SDs that are completely out (can't participate in event readout)
+    #   vector<Int_t> bitfout;
+
+    # badsdinfo_list = [
+    #     [int(c) for c in l.split(" ") if c != ""] for l in badsdinfo_list_str
+    # ]
+    # badsdinfo_list = [
+    #     [badsdinfo_list[i][k * 2] for k in range(len(badsdinfo_list[i]) // 2)]
+    #     for i in range(len(badsdinfo_list))
+    # ]
+    # badsdinfo_set_list = [{e for e in sublist} for sublist in badsdinfo_list]
+
+    # # print(badsdinfo_set_list)
+    # print(badsdinfo_set_list[0])
+    # print(type(badsdinfo_set_list[0]))
+    # input()
+
+    # badsdinfo_list = [
+    #     [int(c) for c in l.split(" ") if c != ""] for l in badsdinfo_list_str
+    # ]
+    # # badsdinfo_list = [[[badsdinfo_list[i][j+k*2] for j in range(2)] for k in range(len(badsdinfo_list[i])//2)] for i in range(len(badsdinfo_list))]
+    # badsdinfo_list = [
+    #     [badsdinfo_list[i][k * 2] for k in range(len(badsdinfo_list[i]) // 2)]
+    #     for i in range(len(badsdinfo_list))
+    # ]
+    # # badsdinfo_set = {tuple(row) for row in badsdinfo_list}
+    # badsdinfo_set_list = [{e for e in sublist} for sublist in badsdinfo_list]
     # print("badsdinfo_list")
     # print(badsdinfo_list)
     # input()
@@ -264,7 +298,7 @@ def center_tile(event, tile_size):
     # ix and iy as one array [ix, iy]
     ixy = np.array([event[0] // 100, event[0] % 100]).astype(np.int32)
     # Indicies of central detector ix0, iy0
-    ixy0 = ixy[:, max_signal_idx]
+    ixy0 = np.copy(ixy[:, max_signal_idx])
     ixy -= ixy0[:, np.newaxis]
     # cut array size to fit the tile size
     inside_tile = (abs(ixy[0]) < tile_size) & (abs(ixy[1]) < tile_size)
@@ -279,7 +313,7 @@ def detector_readings(sdmeta_list, sdwaveform_list, ntile, ntime_trace, data):
     tile_size = (ntile - 1) / 2 + 1
 
     for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
-
+        print(ievt)
         event, wform = cut_events(event, wform, 2)
         ixy0, inside_tile, ixy = center_tile(event, tile_size)
 
@@ -287,18 +321,18 @@ def detector_readings(sdmeta_list, sdwaveform_list, ntile, ntime_trace, data):
         atimes = (event[2] + event[3]) / 2
         # relative time of first arrived particle
         atimes -= np.min(atimes)
-        data["arrival_times"][ievt, ixy[0], ixy[1]] = (
-            atimes[inside_tile] * to_nsec
-        )
+        data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
 
         ttrace = (wform[:ntime_trace] / event[9] + wform[ntime_trace:] / event[10]) / 2
         data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
 
         # Return detector coordinates of the tile centered in ixy0
-        data["detector_positions"][ievt] = tile_positions(ixy0, ntile)
-        data["detector_states"][:, :, :] = True
+        data["detector_positions"][ievt, :, :], data["detector_states"][ievt, :, :] = (
+            tile_positions(ixy0, ntile)
+        )
+        print(data["detector_states"][ievt])
 
-        return data
+    return data
 
 
 def detector_readings_orig(sdmeta_list, sdwaveform_list, detector_tile):
