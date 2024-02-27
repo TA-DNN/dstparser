@@ -8,9 +8,6 @@ from dst_parsers import detector_readings
 dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/DAT000015_gea.dat.hrspctr.1850.specCuts.dst.gz"
 
 
-
-
-
 def parse_dst_file(dst_file):
     dst_string = dst_content(dst_file)
 
@@ -29,17 +26,20 @@ def parse_dst_file(dst_file):
 
     ntile = 7  # number of SD per one side
     ntime_trace = 128  # number of time trace of waveform
-    data = detector_readings(sdmeta_list, sdwaveform_list, ntile, ntime_trace, data)
-    
+    data = detector_readings(
+        sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
+    )
+
     return data
-    
+
+
 data = parse_dst_file(dst_file)
 
 
 for key, val in data.items():
     if isinstance(val, np.ndarray):
         print(key, val.shape)
-    else:    
+    else:
         print(key, len(val), val)
 
 # for i in tqdm(range(10), total=10):

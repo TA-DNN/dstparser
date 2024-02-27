@@ -39,7 +39,7 @@ def find_pos(evt_pos):
     return tasd_clf.tasdmc_clf[first_indices, 1:] / 100
 
 
-def tile_positions(ixy0, tile_size):
+def tile_positions(ixy0, tile_size, badsd):
     # Create centered tile
     n0 = (tile_size - 1) / 2
     x, y = np.mgrid[0:tile_size, 0:tile_size].astype(float) - n0
@@ -55,5 +55,9 @@ def tile_positions(ixy0, tile_size):
     tasdmc_clf_indices = np.argmax(masks, axis=0)
     do_exist = masks.any(axis=0)
     tasdmc_clf_indices = np.where(do_exist, tasdmc_clf_indices, -1)
+    
+    # Do detectors work: 
+    good = ~np.isin(tasd_clf.tasdmc_clf[tasdmc_clf_indices, 0], badsd)
+    status = np.logical_and(good, do_exist)
 
-    return tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:], do_exist
+    return tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:], status

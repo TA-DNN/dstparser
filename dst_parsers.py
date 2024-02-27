@@ -306,14 +306,17 @@ def center_tile(event, tile_size):
     return ixy0, inside_tile, ixy
 
 
-def detector_readings(sdmeta_list, sdwaveform_list, ntile, ntime_trace, data):
+def detector_readings(
+    sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
+):
     to_nsec = 4 * 1000
     num_events = data["mass_number"].shape[0]
     data = init_detector_readings(num_events, ntile, ntime_trace, data)
     tile_size = (ntile - 1) / 2 + 1
 
-    for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
-        print(ievt)
+    for ievt, (event, wform, badsd) in enumerate(
+        zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
+    ):
         event, wform = cut_events(event, wform, 2)
         ixy0, inside_tile, ixy = center_tile(event, tile_size)
 
@@ -328,9 +331,9 @@ def detector_readings(sdmeta_list, sdwaveform_list, ntile, ntime_trace, data):
 
         # Return detector coordinates of the tile centered in ixy0
         data["detector_positions"][ievt, :, :], data["detector_states"][ievt, :, :] = (
-            tile_positions(ixy0, ntile)
+            tile_positions(ixy0, ntile, badsd)
         )
-        print(data["detector_states"][ievt])
+        # print(data["detector_states"][ievt])
 
     return data
 
