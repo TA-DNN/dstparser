@@ -166,9 +166,22 @@ for i in range(len(sdmeta_list)):
     signalMax_yy = 0
     signalMax_size = 0
     firstTime = 10**8
+    
+    # For filtering in the case
+    # when second waveform has sdmeta_list[i][j][1] > 2
+    prev_excluded = False
+    prev = None
     for j in range(len(sdmeta_list[i])):
+        if prev_excluded and (prev == sdmeta_list[i][j][0]):
+            prev_excluded = True
+            prev = sdmeta_list[i][j][0]
+            continue
+
         if sdmeta_list[i][j][1] <= 2:
-            continue ## exclude coincidence signals
+            prev_excluded = True
+            prev = sdmeta_list[i][j][0]
+            continue  ## exclude coincidence signals
+        prev_excluded = False
         xx = int(str(int(sdmeta_list[i][j][0])).zfill(4)[:2])
         yy = int(str(int(sdmeta_list[i][j][0])).zfill(4)[2:])
         signal_size = (sdmeta_list[i][j][4]+sdmeta_list[i][j][5])/2
@@ -190,7 +203,7 @@ for i in range(len(sdmeta_list)):
                 #detector_positions[i][xGrid][yGrid][0] = 1.2 * ((sdmeta_list[i][j][6]-12.2435) - (sdmeta_list[i][center_j][6]-12.2435)) * 1000 # meter
                 #detector_positions[i][xGrid][yGrid][1] = 1.2 * ((sdmeta_list[i][j][7]-16.4406) - (sdmeta_list[i][center_j][7]-16.4406)) * 1000 # meter
                 #detector_positions[i][xGrid][yGrid][2] = 1.2 * (sdmeta_list[i][j][8] - sdmeta_list[i][center_j][8]) * 1000 # meter
-                sd_clf = rufptn_xxyy2sds(int(sdmeta_list[i][j][0]))/100 # meter
+                sd_clf = rufptn_xxyy2sds(int(sdid))/100 # meter
                 detector_positions[i][k][l][0] = sd_clf[1]
                 detector_positions[i][k][l][1] = sd_clf[2]
                 detector_positions[i][k][l][2] = sd_clf[3]
