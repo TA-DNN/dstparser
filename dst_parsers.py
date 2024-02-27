@@ -1,7 +1,20 @@
 import numpy as np
 from utils import rufptn_xxyy2sds
 from utils import tile_positions
+import json
 
+
+def fill_metadata(data, dst_file):
+    meta_data = dict()
+    meta_data["interaction_model"] = "QGSJET-II-03"
+    meta_data["atmosphere_model"] = None
+    meta_data["emin"] = None
+    meta_data["emax"] = None
+    meta_data["espectrum"] = "HiRes"
+    meta_data["dst_file_name"] = dst_file
+
+    data["metadata"] = json.dumps(meta_data, indent=4)
+    return data
 
 def dst_sections(dst_string):
     ## make lists
@@ -13,7 +26,7 @@ def dst_sections(dst_string):
     sdmeta_list_str = []
     sdwaveform_list_str = []
     badsdinfo_list_str = []
-    event = ""
+    
     for il, line in enumerate(dst_string):
         if "EVENT DATA" in line:
             event_readout = True
@@ -51,7 +64,7 @@ def dst_sections(dst_string):
     return event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str
 
 
-def shower_params(event_list_str):
+def shower_params(event_list_str, data):
     # Shower related
     event_list = [[float(c) for c in l.split(" ") if c != ""] for l in event_list_str]
     """
@@ -69,24 +82,22 @@ def shower_params(event_list_str):
     """
 
     event_list = np.array(event_list).astype(np.float32).transpose()
-    mass_number = event_list[0].astype(np.int32)
-    energy = event_list[1]
-    xmax = np.zeros(event_list.shape[1], dtype=np.float32)
-    shower_axis = np.array(
-        [
+    data["mass_number"] = event_list[0].astype(np.int32)
+    data["energy"] = event_list[1]
+    data["xmax"] = np.zeros(event_list.shape[1], dtype=np.float32)
+    data["shower_axis"] = np.array(
             [
                 np.sin(event_list[2]) * np.cos(event_list[3]),
                 np.sin(event_list[2]) * np.sin(event_list[3]),
                 np.cos(event_list[2]),
-            ]
-        ],
+            ],
         dtype=np.float32,
-    )
+    ).transpose()
 
     # ?? should it be float32
-    shower_core = np.array(event_list[4:7, :].transpose(), dtype=np.int32)
+    data["shower_core"] = np.array(event_list[4:7, :].transpose(), dtype=np.int32)
 
-    return mass_number, energy, xmax, shower_axis, shower_core
+    return data
 
 
 def parse_sdmeta(sdmeta_list_str):
@@ -222,15 +233,14 @@ def parse_badsdinfo(badsdinfo_list_str):
     return badsdinfo_list
 
 
-def init_detector_tile(num_events, nTile, nTimeTrace):
+def init_detector_readings(num_events, ntile, ntime_trace, data):
     # Put largest-signal SD at the center of nTile x nTile grids
-    shape = num_events, nTile, nTile
-    detector_tile = dict()
-    detector_tile["arrival_times"] = np.zeros(shape, dtype=np.float32)
-    detector_tile["time_traces"] = np.zeros((*shape, nTimeTrace), dtype=np.float32)
-    detector_tile["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
-    detector_tile["detector_states"] = np.ones(shape, dtype=bool)
-    return detector_tile
+    shape = num_events, ntile, ntile
+    data["arrival_times"] = np.zeros(shape, dtype=np.float32)
+    data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
+    data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
+    data["detector_states"] = np.ones(shape, dtype=bool)
+    return data
 
 
 def cut_events(event, wform, min_ndet):
@@ -247,10 +257,10 @@ def cut_events(event, wform, min_ndet):
     return event, wform
 
 
-def center_tile(event, tile_size):      
+def center_tile(event, tile_size):
     # center around detector with max signal
     max_signal_idx = np.argmax((event[4] + event[5]) / 2)
-    
+
     # ix and iy as one array [ix, iy]
     ixy = np.array([event[0] // 100, event[0] % 100]).astype(np.int32)
     # Indicies of central detector ix0, iy0
@@ -259,17 +269,17 @@ def center_tile(event, tile_size):
     # cut array size to fit the tile size
     inside_tile = (abs(ixy[0]) < tile_size) & (abs(ixy[1]) < tile_size)
     ixy = ixy[:, inside_tile]
-    return ixy0, inside_tile, ixy 
+    return ixy0, inside_tile, ixy
 
 
-def detector_readings(sdmeta_list, sdwaveform_list, detector_tile):
+def detector_readings(sdmeta_list, sdwaveform_list, ntile, ntime_trace, data):
     to_nsec = 4 * 1000
-    nTile = detector_tile["time_traces"].shape[1]
-    nTimeTrace = detector_tile["time_traces"].shape[3]
-    tile_size = (nTile - 1) / 2 + 1
-    
+    num_events = data["mass_number"].shape[0]
+    data = init_detector_readings(num_events, ntile, ntime_trace, data)
+    tile_size = (ntile - 1) / 2 + 1
+
     for ievt, (event, wform) in enumerate(zip(sdmeta_list, sdwaveform_list)):
-    
+
         event, wform = cut_events(event, wform, 2)
         ixy0, inside_tile, ixy = center_tile(event, tile_size)
 
@@ -277,16 +287,19 @@ def detector_readings(sdmeta_list, sdwaveform_list, detector_tile):
         atimes = (event[2] + event[3]) / 2
         # relative time of first arrived particle
         atimes -= np.min(atimes)
-        detector_tile["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
+        data["arrival_times"][ievt, ixy[0], ixy[1]] = (
+            atimes[inside_tile] * to_nsec
+        )
 
-        ttrace = (wform[:nTimeTrace] / event[9] + wform[nTimeTrace:] / event[10])/2
-        detector_tile["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
-        
+        ttrace = (wform[:ntime_trace] / event[9] + wform[ntime_trace:] / event[10]) / 2
+        data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+
         # Return detector coordinates of the tile centered in ixy0
-        detector_tile["detector_positions"][ievt] = tile_positions(ixy0, nTile)
-        detector_tile["detector_states"][:,:,:] = True
-        
-        return detector_tile
+        data["detector_positions"][ievt] = tile_positions(ixy0, ntile)
+        data["detector_states"][:, :, :] = True
+
+        return data
+
 
 def detector_readings_orig(sdmeta_list, sdwaveform_list, detector_tile):
 
