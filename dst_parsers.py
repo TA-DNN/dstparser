@@ -2,6 +2,7 @@ import numpy as np
 from utils import rufptn_xxyy2sds
 from utils import tile_positions
 import json
+from dst_content import dst_content
 
 
 def fill_metadata(data, dst_file):
@@ -328,3 +329,29 @@ def detector_readings_orig(sdmeta_list, sdwaveform_list, detector_tile):
                 detector_tile["detector_states"][i][xGrid][yGrid] = True
 
     return detector_tile
+
+
+
+def parse_dst_file(dst_file):
+    dst_string = dst_content(dst_file)
+
+    event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
+        dst_sections(dst_string)
+    )
+
+    sdmeta_list = parse_sdmeta(sdmeta_list_str)
+    sdwaveform_list = parse_sdwaveform(sdwaveform_list_str)
+    badsdinfo_list = parse_badsdinfo(badsdinfo_list_str)
+
+    # Dictionary with parsed data
+    data = dict()
+    data = fill_metadata(data, dst_file)
+    data = shower_params(event_list_str, data)
+
+    ntile = 7  # number of SD per one side
+    ntime_trace = 128  # number of time trace of waveform
+    data = detector_readings(
+        sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
+    )
+
+    return data
