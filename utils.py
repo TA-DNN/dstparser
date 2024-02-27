@@ -41,8 +41,8 @@ def find_pos(evt_pos):
 
 def tile_positions(ixy0, tile_size, badsd):
     # Create centered tile
-    n0 = (tile_size - 1) / 2
-    x, y = np.mgrid[0:tile_size, 0:tile_size].astype(float) - n0
+    # n0 = (tile_size - 1) / 2
+    x, y = np.mgrid[0:tile_size, 0:tile_size].astype(float)
 
     # Shift towards real center
     # ixy0 = [24, 10] - at the edge, uncomment for testing
@@ -55,9 +55,12 @@ def tile_positions(ixy0, tile_size, badsd):
     tasdmc_clf_indices = np.argmax(masks, axis=0)
     do_exist = masks.any(axis=0)
     tasdmc_clf_indices = np.where(do_exist, tasdmc_clf_indices, -1)
-    
-    # Do detectors work: 
+
+    # Do detectors work:
     good = ~np.isin(tasd_clf.tasdmc_clf[tasdmc_clf_indices, 0], badsd)
     status = np.logical_and(good, do_exist)
 
-    return tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:], status
+    # abs_coord = tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
+    # abs_coord =
+
+    return tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:] / 1e2, status

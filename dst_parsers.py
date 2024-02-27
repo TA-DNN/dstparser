@@ -202,9 +202,20 @@ def init_detector_readings(num_events, ntile, ntime_trace, data):
     return data
 
 
-def cut_events(event, wform, min_ndet):
-    # Events with > 2 detectors
-    event = event[:, event[1] > min_ndet]
+def cut_events(event, wform):
+    # ! If the signal > 128 bins it is divided on parts with 128 in each
+    # ! The code below takes only first part (waveform) in case if 
+    # ! the signal consists of several such parts   
+    # Set all repeating elements to False, except first one
+    sdid = event[0]
+    u, c = np.unique(sdid, return_counts=True)
+    dup = u[c > 1]
+    mask = sdid == sdid
+    for el in dup:
+        mask[np.where(sdid == el)[0][1:]] = False    
+    event = event[:, mask]
+    # exclude coincidence signals
+    event = event[:, event[1] > 2]
 
     # Pick corresponding waveforms
     wform_idx = []
@@ -216,17 +227,17 @@ def cut_events(event, wform, min_ndet):
     return event, wform
 
 
-def center_tile(event, tile_size):
+def center_tile(event, ntile):
     # center around detector with max signal
     max_signal_idx = np.argmax((event[4] + event[5]) / 2)
 
     # ix and iy as one array [ix, iy]
     ixy = np.array([event[0] // 100, event[0] % 100]).astype(np.int32)
     # Indicies of central detector ix0, iy0
-    ixy0 = np.copy(ixy[:, max_signal_idx])
+    ixy0 = np.copy(ixy[:, max_signal_idx]) - (ntile - 1) // 2
     ixy -= ixy0[:, np.newaxis]
     # cut array size to fit the tile size
-    inside_tile = (abs(ixy[0]) < tile_size) & (abs(ixy[1]) < tile_size)
+    inside_tile = (ixy[0] < ntile) & (ixy[1] < ntile)
     ixy = ixy[:, inside_tile]
     return ixy0, inside_tile, ixy
 
@@ -237,13 +248,13 @@ def detector_readings(
     to_nsec = 4 * 1000
     num_events = data["mass_number"].shape[0]
     data = init_detector_readings(num_events, ntile, ntime_trace, data)
-    tile_size = (ntile - 1) / 2 + 1
 
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
-        event, wform = cut_events(event, wform, 2)
-        ixy0, inside_tile, ixy = center_tile(event, tile_size)
+        
+        event, wform = cut_events(event, wform)
+        ixy0, inside_tile, ixy = center_tile(event, ntile)
 
         # averaged arrival times
         atimes = (event[2] + event[3]) / 2
@@ -258,6 +269,35 @@ def detector_readings(
         data["detector_positions"][ievt, :, :], data["detector_states"][ievt, :, :] = (
             tile_positions(ixy0, ntile, badsd)
         )
+
+        data["arrival_times"][ievt, :, :] = np.where(
+            data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
+        )
+
+    return data
+
+
+def parse_dst_file(dst_file):
+    dst_string = dst_content(dst_file)
+
+    event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
+        dst_sections(dst_string)
+    )
+
+    sdmeta_list = parse_sdmeta(sdmeta_list_str)
+    sdwaveform_list = parse_sdwaveform(sdwaveform_list_str)
+    badsdinfo_list = parse_badsdinfo(badsdinfo_list_str)
+
+    # Dictionary with parsed data
+    data = dict()
+    data = fill_metadata(data, dst_file)
+    data = shower_params(event_list_str, data)
+
+    ntile = 7  # number of SD per one side
+    ntime_trace = 128  # number of time trace of waveform
+    data = detector_readings(
+        sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
+    )
 
     return data
 
@@ -329,29 +369,3 @@ def detector_readings_orig(sdmeta_list, sdwaveform_list, detector_tile):
                 detector_tile["detector_states"][i][xGrid][yGrid] = True
 
     return detector_tile
-
-
-
-def parse_dst_file(dst_file):
-    dst_string = dst_content(dst_file)
-
-    event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
-        dst_sections(dst_string)
-    )
-
-    sdmeta_list = parse_sdmeta(sdmeta_list_str)
-    sdwaveform_list = parse_sdwaveform(sdwaveform_list_str)
-    badsdinfo_list = parse_badsdinfo(badsdinfo_list_str)
-
-    # Dictionary with parsed data
-    data = dict()
-    data = fill_metadata(data, dst_file)
-    data = shower_params(event_list_str, data)
-
-    ntile = 7  # number of SD per one side
-    ntime_trace = 128  # number of time trace of waveform
-    data = detector_readings(
-        sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
-    )
-
-    return data
