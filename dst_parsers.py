@@ -89,15 +89,15 @@ def shower_params(event_list_str, data):
     data["xmax"] = np.zeros(event_list.shape[1], dtype=np.float32)
     data["shower_axis"] = np.array(
         [
-            np.sin(event_list[2]) * np.cos(event_list[3]),
-            np.sin(event_list[2]) * np.sin(event_list[3]),
+            np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
+            np.sin(event_list[2]) * np.sin(event_list[3] + np.pi),
             np.cos(event_list[2]),
         ],
         dtype=np.float32,
     ).transpose()
-
+    
     # ?? should it be float32
-    data["shower_core"] = np.array(event_list[4:7, :].transpose(), dtype=np.int32)
+    data["shower_core"] = np.array(event_list[4:7, :].transpose() / 100, dtype=np.int32)
 
     return data
 
@@ -248,11 +248,11 @@ def detector_readings(
     to_nsec = 4 * 1000
     num_events = data["mass_number"].shape[0]
     data = init_detector_readings(num_events, ntile, ntime_trace, data)
-
+    
+    
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
-        
         event, wform = cut_events(event, wform)
         ixy0, inside_tile, ixy = center_tile(event, ntile)
 
@@ -292,13 +292,13 @@ def parse_dst_file(dst_file):
     data = dict()
     data = fill_metadata(data, dst_file)
     data = shower_params(event_list_str, data)
-
+    
     ntile = 7  # number of SD per one side
     ntime_trace = 128  # number of time trace of waveform
     data = detector_readings(
         sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
     )
-
+    
     return data
 
 

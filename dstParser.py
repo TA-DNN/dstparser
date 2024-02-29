@@ -92,6 +92,7 @@ def parse_script(dst_file):
             sdwaveform_list_str.append(line)
         elif badsdinfo_readout:
             badsdinfo_list_str.append(line)
+            
 
     ##
     ## Make Data set
@@ -136,8 +137,8 @@ def parse_script(dst_file):
     shower_axis = np.array(
         [
             [
-                np.sin(item[2]) * np.cos(item[3]),
-                np.sin(item[2]) * np.sin(item[3]),
+                np.sin(item[2]) * np.cos(item[3] + np.pi),
+                np.sin(item[2]) * np.sin(item[3] + np.pi),
                 np.cos(item[2]),
             ]
             for item in event_list
@@ -145,7 +146,7 @@ def parse_script(dst_file):
         dtype=np.float32,
     )
     shower_core = np.array(
-        [[item[4], item[5], item[6]] for item in event_list], dtype=np.int32
+        [[item[4]/100, item[5]/100, item[6]/100] for item in event_list], dtype=np.int32
     )
 
     ## Detection related
