@@ -247,24 +247,27 @@ def detector_readings(
 ):
     to_nsec = 4 * 1000
     num_events = data["mass_number"].shape[0]
-    data = init_detector_readings(num_events, ntile, ntime_trace, data)
-    
+    data = init_detector_readings(num_events, ntile, ntime_trace, data)    
     
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
+        
         event, wform = cut_events(event, wform)
         ixy0, inside_tile, ixy = center_tile(event, ntile)
-
+        wform = wform[:, inside_tile]
+        fadc_per_vem_low = event[9][inside_tile]
+        fadc_per_vem_up  = event[10][inside_tile]
+        
         # averaged arrival times
         atimes = (event[2] + event[3]) / 2
         # relative time of first arrived particle
         atimes -= np.min(atimes)
         data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
-
-        ttrace = (wform[:ntime_trace] / event[9] + wform[ntime_trace:] / event[10]) / 2
+        
+        ttrace = (wform[:ntime_trace] / fadc_per_vem_low + wform[ntime_trace:] / fadc_per_vem_up ) / 2
         data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
-
+        
         # Return detector coordinates of the tile centered in ixy0
         data["detector_positions"][ievt, :, :], data["detector_states"][ievt, :, :] = (
             tile_positions(ixy0, ntile, badsd)
