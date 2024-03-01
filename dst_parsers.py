@@ -1,5 +1,4 @@
 import numpy as np
-from utils import rufptn_xxyy2sds
 from utils import tile_positions
 import json
 from dst_content import dst_content
@@ -65,6 +64,8 @@ def dst_sections(dst_string):
 
     return event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str
 
+def CORSIKAparticleID2mass(corsikaPID):
+    return np.where(corsikaPID == 14, 1, corsikaPID // 100).astype(np.int32)
 
 def shower_params(event_list_str, data):
     # Shower related
@@ -84,7 +85,7 @@ def shower_params(event_list_str, data):
     """
 
     event_list = np.array(event_list).astype(np.float32).transpose()
-    data["mass_number"] = event_list[0].astype(np.int32)
+    data["mass_number"] = CORSIKAparticleID2mass(event_list[0])
     data["energy"] = event_list[1]
     data["xmax"] = np.zeros(event_list.shape[1], dtype=np.float32)
     data["shower_axis"] = np.array(
@@ -204,15 +205,15 @@ def init_detector_readings(num_events, ntile, ntime_trace, data):
 
 def cut_events(event, wform):
     # ! If the signal > 128 bins it is divided on parts with 128 in each
-    # ! The code below takes only first part (waveform) in case if 
-    # ! the signal consists of several such parts   
+    # ! The code below takes only first part (waveform) in case if
+    # ! the signal consists of several such parts
     # Set all repeating elements to False, except first one
     sdid = event[0]
     u, c = np.unique(sdid, return_counts=True)
     dup = u[c > 1]
     mask = sdid == sdid
     for el in dup:
-        mask[np.where(sdid == el)[0][1:]] = False    
+        mask[np.where(sdid == el)[0][1:]] = False
     event = event[:, mask]
     # exclude coincidence signals
     event = event[:, event[1] > 2]
@@ -312,72 +313,3 @@ def parse_dst_file(dst_file):
     )
     
     return data
-
-
-def detector_readings_orig(sdmeta_list, sdwaveform_list, detector_tile):
-
-    nTile = detector_tile["arrival_times"].shape[1]
-
-    for i in range(len(sdmeta_list)):
-        # if i>0:
-        #    continue
-        signalMax_xx = 0
-        signalMax_yy = 0
-        signalMax_size = 0
-        firstTime = 10**8
-        for j in range(len(sdmeta_list[i])):
-            if sdmeta_list[i][j][1] <= 2:
-                continue  ## exclude coincidence signals
-            xx = int(str(int(sdmeta_list[i][j][0])).zfill(4)[:2])
-            yy = int(str(int(sdmeta_list[i][j][0])).zfill(4)[2:])
-            signal_size = (sdmeta_list[i][j][4] + sdmeta_list[i][j][5]) / 2
-            if (sdmeta_list[i][j][2] + sdmeta_list[i][j][3]) / 2 < firstTime:
-                firstTime = (sdmeta_list[i][j][2] + sdmeta_list[i][j][3]) / 2
-            if signal_size > signalMax_size:
-                signalMax_xx = xx
-                signalMax_yy = yy
-                signalMax_size = signal_size
-                center_j = j
-            # print("##",xx,yy,signal_size,signalMax_xx,signalMax_yy,signalMax_size)
-        for j in range(len(sdmeta_list[i])):
-            if sdmeta_list[i][j][1] <= 2:
-                continue  ## exclude coincidence signals
-            xx = int(str(int(sdmeta_list[i][j][0])).zfill(4)[:2])
-            yy = int(str(int(sdmeta_list[i][j][0])).zfill(4)[2:])
-            xGrid = int(-signalMax_xx + xx + (nTile - 1) / 2)
-            yGrid = int(-signalMax_yy + yy + (nTile - 1) / 2)
-            # print(xx,yy,xGrid,yGrid)
-            if xGrid >= 0 and xGrid < nTile and yGrid >= 0 and yGrid < nTile:
-                detector_tile["arrival_times"][i][xGrid][yGrid] = (
-                    ((sdmeta_list[i][j][2] + sdmeta_list[i][j][3]) / 2 - firstTime)
-                    * 4
-                    * 1000
-                )  # nsec
-                fadc_low = np.array(
-                    next(
-                        item[3 : 3 + 128]
-                        for item in sdwaveform_list[i]
-                        if item[0] == sdmeta_list[i][j][0]
-                    )
-                )
-                fadc_up = np.array(
-                    next(
-                        item[3 + 128 :]
-                        for item in sdwaveform_list[i]
-                        if item[0] == sdmeta_list[i][j][0]
-                    )
-                )
-                detector_tile["time_traces"][i][xGrid][yGrid][:] = (
-                    fadc_low / sdmeta_list[i][j][9] + fadc_up / sdmeta_list[i][j][10]
-                ) / 2  ## average of lower & upper FADC signal
-                # detector_positions[i][xGrid][yGrid][0] = 1.2 * ((sdmeta_list[i][j][6]-12.2435) - (sdmeta_list[i][center_j][6]-12.2435)) * 1000 # meter
-                # detector_positions[i][xGrid][yGrid][1] = 1.2 * ((sdmeta_list[i][j][7]-16.4406) - (sdmeta_list[i][center_j][7]-16.4406)) * 1000 # meter
-                # detector_positions[i][xGrid][yGrid][2] = 1.2 * (sdmeta_list[i][j][8] - sdmeta_list[i][center_j][8]) * 1000 # meter
-                sd_clf = rufptn_xxyy2sds(int(sdmeta_list[i][j][0])) / 100  # meter
-                for ii in range(3):
-                    detector_tile["detector_positions"][i][xGrid][yGrid][ii] = sd_clf[
-                        ii + 1
-                    ]
-                detector_tile["detector_states"][i][xGrid][yGrid] = True
-
-    return detector_tile
