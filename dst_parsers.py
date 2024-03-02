@@ -247,13 +247,21 @@ def detector_readings(
 ):
     to_nsec = 4 * 1000
     num_events = data["mass_number"].shape[0]
-    data = init_detector_readings(num_events, ntile, ntime_trace, data)    
-    
-    for ievt, (event, wform, badsd) in enumerate(
-        zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
-    ):
-        
+    data = init_detector_readings(num_events, ntile, ntime_trace, data)
+    ievt = 0
+    ievt2 = 0
+    while ievt2 < num_events:
+        event, wform, badsd = sdmeta_list[ievt2], sdwaveform_list[ievt2], badsdinfo_list[ievt2]
         event, wform = cut_events(event, wform)
+        if event.shape[1] == 0: ## delete event with zero waveforms after `cut_events`
+            for key, value in data.items():
+                if key != "metadata":
+                    if value.ndim == 1:
+                        data[key] = np.delete(data[key], ievt)
+                    else:
+                        data[key] = np.delete(data[key], ievt, axis=0)
+            ievt2 += 1
+            continue
         ixy0, inside_tile, ixy = center_tile(event, ntile)
         wform = wform[:, inside_tile]
         fadc_per_vem_low = event[9][inside_tile]
@@ -276,7 +284,8 @@ def detector_readings(
         data["arrival_times"][ievt, :, :] = np.where(
             data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
         )
-
+        ievt += 1
+        ievt2 += 1
     return data
 
 
