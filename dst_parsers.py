@@ -64,8 +64,10 @@ def dst_sections(dst_string):
 
     return event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str
 
+
 def CORSIKAparticleID2mass(corsikaPID):
     return np.where(corsikaPID == 14, 1, corsikaPID // 100).astype(np.int32)
+
 
 def shower_params(event_list_str, data):
     # Shower related
@@ -96,9 +98,11 @@ def shower_params(event_list_str, data):
         ],
         dtype=np.float32,
     ).transpose()
-    
+
     # ?? should it be float32
-    data["shower_core"] = np.array(event_list[4:7, :].transpose() / 100, dtype=np.int32)
+    data["shower_core"] = np.array(
+        event_list[4:7, :].transpose() / 100, dtype=np.float32
+    )
 
     return data
 
@@ -199,7 +203,7 @@ def init_detector_readings(num_events, ntile, ntime_trace, data):
     data["arrival_times"] = np.zeros(shape, dtype=np.float32)
     data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
     data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
-    data["detector_states"] = np.ones(shape, dtype=bool)
+    data["detector_states"] = np.zeros(shape, dtype=bool)
     return data
 
 
@@ -214,6 +218,7 @@ def cut_events(event, wform):
     mask = sdid == sdid
     for el in dup:
         mask[np.where(sdid == el)[0][1:]] = False
+
     event = event[:, mask]
     # exclude coincidence signals
     event = event[:, event[1] > 2]
@@ -248,37 +253,50 @@ def detector_readings(
 ):
     to_nsec = 4 * 1000
     num_events = data["mass_number"].shape[0]
-    data = init_detector_readings(num_events, ntile, ntime_trace, data)    
-    
+    data = init_detector_readings(num_events, ntile, ntime_trace, data)
+
+    empty_events = []
+
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
-        
+
         event, wform = cut_events(event, wform)
+
+        if event.shape[1] == 0:
+            empty_events.append(ievt)
+            continue
+
         ixy0, inside_tile, ixy = center_tile(event, ntile)
         wform = wform[:, inside_tile]
         fadc_per_vem_low = event[9][inside_tile]
-        fadc_per_vem_up  = event[10][inside_tile]
-        
+        fadc_per_vem_up = event[10][inside_tile]
+
         # averaged arrival times
         atimes = (event[2] + event[3]) / 2
         # relative time of first arrived particle
         atimes -= np.min(atimes)
         data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
-        
-        ttrace = (wform[:ntime_trace] / fadc_per_vem_low + wform[ntime_trace:] / fadc_per_vem_up ) / 2
+
+        ttrace = (
+            wform[:ntime_trace] / fadc_per_vem_low
+            + wform[ntime_trace:] / fadc_per_vem_up
+        ) / 2
         data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
-        
+
+        shower_core = data["shower_core"][ievt]
         # Return detector coordinates of the tile centered in ixy0
-        data["detector_positions"][ievt, :, :], data["detector_states"][ievt, :, :] = (
-            tile_positions(ixy0, ntile, badsd)
-        )
+        (
+            data["detector_positions"][ievt, :, :],
+            data["detector_states"][ievt, :, :],
+            data["shower_core"][ievt][:],
+        ) = tile_positions(ixy0, ntile, badsd, shower_core)
 
         data["arrival_times"][ievt, :, :] = np.where(
             data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
         )
 
-    return data
+    return data, empty_events
 
 
 def parse_dst_file(dst_file):
@@ -296,11 +314,21 @@ def parse_dst_file(dst_file):
     data = dict()
     data = fill_metadata(data, dst_file)
     data = shower_params(event_list_str, data)
-    
+
     ntile = 7  # number of SD per one side
     ntime_trace = 128  # number of time trace of waveform
-    data = detector_readings(
+    data, empty_events = detector_readings(
         sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
     )
-    
+
+    # Norm for xy detector positions
+    # norm_xy = 1200 * ((ntile - 1) // 2)
+
+    if len(empty_events) != 0:
+        # Remove empty events
+        for key, value in data.items():
+            if key == "metadata":
+                continue
+            data[key] = np.delete(value, empty_events, axis=0)
+
     return data

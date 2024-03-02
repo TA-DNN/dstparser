@@ -131,7 +131,7 @@ def parse_script(dst_file):
     # Shower related
     event_list = [[float(c) for c in l.split(" ") if c != ""] for l in event_list_str]
 
-    mass_number = np.array([item[0] for item in event_list], dtype=np.int32)
+    mass_number = np.array([CORSIKAparticleID2mass(item[0]) for item in event_list], dtype=np.int32)
     energy = np.array([item[1] for item in event_list], dtype=np.float32)
     xmax = np.array([0 for item in event_list])
     shower_axis = np.array(
