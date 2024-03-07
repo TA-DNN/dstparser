@@ -69,7 +69,7 @@ def CORSIKAparticleID2mass(corsikaPID):
     return np.where(corsikaPID == 14, 1, corsikaPID // 100).astype(np.int32)
 
 
-def shower_params(event_list_str, data):
+def shower_params(event_list_str, data, dst_file, xmax_reader):
     # Shower related
     event_list = [[float(c) for c in l.split(" ") if c != ""] for l in event_list_str]
     """
@@ -86,10 +86,16 @@ def shower_params(event_list_str, data):
                     "rusdraw_nofwf"]
     """
 
-    event_list = np.array(event_list).astype(np.float32).transpose()
-    data["mass_number"] = CORSIKAparticleID2mass(event_list[0])
+
+    try:
+        event_list = np.array(event_list).astype(np.float32).transpose()
+        data["mass_number"] = CORSIKAparticleID2mass(event_list[0])
+    except Exception as ex:
+        print(event_list_str)
+        input()
+    
     data["energy"] = event_list[1]
-    data["xmax"] = np.zeros(event_list.shape[1], dtype=np.float32)
+    data["xmax"] = xmax_reader(dst_file, data["energy"])
     data["shower_axis"] = np.array(
         [
             np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
@@ -299,12 +305,15 @@ def detector_readings(
     return data, empty_events
 
 
-def parse_dst_file(dst_file):
+def parse_dst_file(dst_file, xmax_reader):
     dst_string = dst_content(dst_file)
 
     event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
         dst_sections(dst_string)
     )
+    
+    if len(event_list_str) == 0:
+        return None
 
     sdmeta_list = parse_sdmeta(sdmeta_list_str)
     sdwaveform_list = parse_sdwaveform(sdwaveform_list_str)
@@ -313,7 +322,7 @@ def parse_dst_file(dst_file):
     # Dictionary with parsed data
     data = dict()
     data = fill_metadata(data, dst_file)
-    data = shower_params(event_list_str, data)
+    data = shower_params(event_list_str, data, dst_file, xmax_reader)
 
     ntile = 7  # number of SD per one side
     ntime_trace = 128  # number of time trace of waveform

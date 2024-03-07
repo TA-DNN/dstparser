@@ -46,7 +46,6 @@ def capture_output(cmd):
             env=os.environ,
         )
         output, error = process.communicate()
-        # print(error)
         return output
     except subprocess.CalledProcessError as e:
         return e.output

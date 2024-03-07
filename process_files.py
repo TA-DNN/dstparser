@@ -70,9 +70,15 @@ def run_dst_process():
         outfile = f"{dir_fname[0]}/{dir_fname[1]}".split(sep="_")[0] + ".h5"
         outfile = outdir / outfile
         outfile.parent.mkdir(parents=True, exist_ok=True)
-        data = parse_dst_file(str(infile))
         print(outfile)
-        save_dict_to_hdf5(outfile, data)
+        data = parse_dst_file(str(infile))
+        if data is None:
+            print("NONE!")
+            continue
+        else:
+            nevents = data["mass_number"].shape[0]
+            print(f"Save {nevents} events")
+            save_dict_to_hdf5(outfile, data)
 
 
 def test():
@@ -92,30 +98,33 @@ def test():
     )
     outdir = Path(res_dir)
     dst_files_task = dst_files[0]
-    
-    infile = dst_files_task[4]
-    dir_fname = infile.parts[-2:]
-    outfile = f"{dir_fname[0]}/{dir_fname[1]}".split(sep="_")[0] + ".h5"
-    outfile = outdir / outfile
-    print(outfile)
-    
-    # outfile.parent.mkdir(parents=True, exist_ok=True)
-    data = parse_dst_file(str(infile))
-    print(data["shower_core"][10])
-    print(data["detector_positions"][10])
 
+    for infile in dst_files_task:
+        dir_fname = infile.parts[-2:]
+        outfile = f"{dir_fname[0]}/{dir_fname[1]}".split(sep="_")[0] + ".h5"
+        outfile = outdir / outfile
+        print(outfile)
+
+        # outfile.parent.mkdir(parents=True, exist_ok=True)
+        data = parse_dst_file(str(infile))
+        if data is None:
+            print("NONE!")
+            continue
+        else:
+            nevents = data["mass_number"].shape[0]
+            print(f"Saved {nevents} events")
 
     # for infile in dst_files_task:
     #     dir_fname = infile.parts[-2:]
     #     outfile = f"{dir_fname[0]}/{dir_fname[1]}".split(sep="_")[0] + ".h5"
     #     outfile = outdir / outfile
     #     print(outfile)
-        # outfile.parent.mkdir(parents=True, exist_ok=True)
-        # data = parse_dst_file(str(infile))
-        # print(outfile)
-        # save_dict_to_hdf5(outfile, data)
+    # outfile.parent.mkdir(parents=True, exist_ok=True)
+    # data = parse_dst_file(str(infile))
+    # print(outfile)
+    # save_dict_to_hdf5(outfile, data)
 
 
 if __name__ == "__main__":
-    # info_wrapper(run_dst_process)
-    test()
+    info_wrapper(run_dst_process)
+    # test()
