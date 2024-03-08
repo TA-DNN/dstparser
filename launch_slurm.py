@@ -2,7 +2,7 @@ from srecog.slurm.slurm_launcher import output_env, run_job
 
 
 root_dir = "/dicos_ui_home/antonpr/ml/erdmann/generated_data"
-out_dir = root_dir + "/12_dst_TA/01_run"
+out_dir = root_dir + "/12_dst_TA/03_xmax_7x7"
 res_name = "proc"
 res_dir = out_dir + f"/results/{res_name}"
 out_dir = out_dir + f"/runs/{res_name}"
@@ -11,7 +11,7 @@ output_file, error_file, script_file = output_env(out_dir)
 
 
 slurm_directives = {
-    "job-name": "proc_dst",
+    "job-name": "proc_dst9",
     "array": "0-999",
     "ntasks": 1,
     "mem": "3gb",

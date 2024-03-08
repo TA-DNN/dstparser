@@ -7,6 +7,8 @@ from srecog.utils.info import info_wrapper
 from pathlib import Path
 import os
 import sys
+from xmax_reader import XmaxReader
+
 
 
 def slurm_parameters():
@@ -65,13 +67,14 @@ def run_dst_process():
     outdir = Path(sys.argv[1])
     dst_files_task = dst_files[task_id]
 
+    xmreader = XmaxReader()
     for infile in dst_files_task:
         dir_fname = infile.parts[-2:]
         outfile = f"{dir_fname[0]}/{dir_fname[1]}".split(sep="_")[0] + ".h5"
         outfile = outdir / outfile
         outfile.parent.mkdir(parents=True, exist_ok=True)
         print(outfile)
-        data = parse_dst_file(str(infile))
+        data = parse_dst_file(str(infile), xmreader, ntile=7)
         if data is None:
             print("NONE!")
             continue

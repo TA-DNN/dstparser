@@ -28,13 +28,12 @@ class XmaxReader:
 
         self.file_idxs = np.concatenate(file_idx)
         self.all_xmax = np.concatenate(all_xmax)
-        
-        # Energy bins in EeV
-        self.en_bins = np.geomspace(1, 1000, 31)[0:25]
 
+        # Energy bins in EeV
+        self.en_bins = np.geomspace(1, 1000, 31)
 
     def _extract_idx(self, file_name):
-        pattern = r'DAT(\d+)_'
+        pattern = r"DAT(\d+)_"
         match = re.search(pattern, file_name.name)
         if match:
             return match.group(1)
@@ -49,16 +48,15 @@ class XmaxReader:
             xmax0 = self.all_xmax[np.where(self.file_idxs == file_idx)[0]][0]
         except Exception:
             xmax0 = None
-        return xmax0, en0    
-        
+        return xmax0, en0
 
     def __call__(self, file_name, energies):
         # Getting xmax0 and scaling with energy
         # according <Xmax>
         xmax0, en0 = self._xmax0_en0(file_name)
-        print(xmax0, en0, str(file_name))
+        # print(xmax0, en0, str(file_name))
         if (xmax0 == 0) or (xmax0 is None):
-            return np.zeros(energies.shape0, dtype = np.float32)
+            return np.zeros(energies.shape[0], dtype=np.float32)
         else:
             elong_rate = 45.8  # elongation rate for QGSJetII
-            return xmax0 + elong_rate * np.log10(energies/en0)
+            return xmax0 + elong_rate * np.log10(energies / en0)

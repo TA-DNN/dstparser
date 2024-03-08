@@ -86,14 +86,13 @@ def shower_params(event_list_str, data, dst_file, xmax_reader):
                     "rusdraw_nofwf"]
     """
 
-
     try:
         event_list = np.array(event_list).astype(np.float32).transpose()
         data["mass_number"] = CORSIKAparticleID2mass(event_list[0])
     except Exception as ex:
         print(event_list_str)
         input()
-    
+
     data["energy"] = event_list[1]
     data["xmax"] = xmax_reader(dst_file, data["energy"])
     data["shower_axis"] = np.array(
@@ -305,13 +304,14 @@ def detector_readings(
     return data, empty_events
 
 
-def parse_dst_file(dst_file, xmax_reader):
+def parse_dst_file(dst_file, xmax_reader, ntile=7):
+    #  ntile  # number of SD per one side
     dst_string = dst_content(dst_file)
 
     event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
         dst_sections(dst_string)
     )
-    
+
     if len(event_list_str) == 0:
         return None
 
@@ -324,7 +324,7 @@ def parse_dst_file(dst_file, xmax_reader):
     data = fill_metadata(data, dst_file)
     data = shower_params(event_list_str, data, dst_file, xmax_reader)
 
-    ntile = 7  # number of SD per one side
+    ntile = ntile  # number of SD per one side
     ntime_trace = 128  # number of time trace of waveform
     data, empty_events = detector_readings(
         sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, ntime_trace, data
