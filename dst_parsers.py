@@ -1,7 +1,7 @@
 import numpy as np
 from utils import tile_positions
 import json
-from dst_content import dst_content
+from dst_content import read_dst_file
 
 
 def fill_metadata(data, dst_file):
@@ -306,7 +306,7 @@ def detector_readings(
 
 def parse_dst_file(dst_file, xmax_reader, ntile=7):
     #  ntile  # number of SD per one side
-    dst_string = dst_content(dst_file)
+    dst_string = read_dst_file(dst_file)
 
     event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
         dst_sections(dst_string)
