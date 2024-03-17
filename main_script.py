@@ -1,6 +1,6 @@
 from tqdm import tqdm
 import numpy as np
-from dst_parsers import parse_dst_file
+from dst_parser import parse_dst_file
 from dstParser import parse_script
 
 dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/DAT000015_gea.dat.hrspctr.1850.specCuts.dst.gz"

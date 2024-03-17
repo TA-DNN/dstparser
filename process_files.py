@@ -1,6 +1,6 @@
 from tqdm import tqdm
 import numpy as np
-from dst_parsers import parse_dst_file
+from dst_parser import parse_dst_file
 from read_data import data_files
 from srecog.utils.hdf5_utils import save_dict_to_hdf5
 from srecog.utils.info import info_wrapper

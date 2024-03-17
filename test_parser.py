@@ -1,5 +1,5 @@
 import numpy as np
-from dst_parsers import parse_dst_file
+from dst_adapter import parse_dst_file
 from xmax_reader import XmaxReader
 
 
