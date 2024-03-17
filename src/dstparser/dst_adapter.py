@@ -1,8 +1,8 @@
 import json
 import numpy as np
-from dst_reader import read_dst_file, read_xmax_data
-from dst_parsers import parse_dst_string
-import tasd_clf
+from dstparser.dst_reader import read_dst_file, read_xmax_data
+from dstparser.dst_parsers import parse_dst_string
+import dstparser.tasd_clf as tasd_clf
 
 
 def fill_metadata(data, dst_file):

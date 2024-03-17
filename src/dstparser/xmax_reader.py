@@ -1,7 +1,7 @@
 import numpy as np
 import re
 from pathlib import Path
-from read_data import data_files
+from dstparser.read_data import data_files
 
 
 class XmaxReader:

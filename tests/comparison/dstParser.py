@@ -18,7 +18,7 @@ os.environ["PATH"] = (
 import subprocess
 
 ##
-import tasd_clf  ## TASD position (CLF)
+import tasd_clf ## TASD position (CLF)
 
 
 def parse_script(dst_file):

@@ -1,26 +1,23 @@
 import os
 from pathlib import Path
 import subprocess
-from env_vars import changed_env_paths
-from xmax_reader import XmaxReader
+from dstparser.env_vars import changed_env_paths
+from dstparser.xmax_reader import XmaxReader
+from dstparser.paths import (
+    root_dir,
+    dst_reader,
+    sd_analysis_env,
+    xmax_data_files,
+    xmax_data_dir,
+)
 
-
-root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM"
-dst_reader = "sditerator.run"
-sd_analysis_env = "sdanalysis_env.sh"
-sd_analysis_env = str(Path(root_dir) / sd_analysis_env)
 
 # Loading environment from "sdanalysis_env.sh"
+sd_analysis_env = str(Path(root_dir) / sd_analysis_env)
 for env_var, path_var in changed_env_paths(sd_analysis_env).items():
     os.environ[env_var] = path_var
 
 # Loading data for xmax
-xmax_data_files = "DAT*_xmax.txt"
-xmax_data_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
-    "qgsii03proton/080511_230511/noCuts_HiResSpectrum/"
-)
-
 xmax_data = XmaxReader(xmax_data_dir, xmax_data_files)
 
 
