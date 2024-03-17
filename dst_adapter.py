@@ -1,8 +1,8 @@
 import json
 import numpy as np
-from utils import tile_positions
 from dst_reader import read_dst_file
-from dst_parser import parse_dst_string
+from dst_parsers import parse_dst_string
+import tasd_clf
 
 
 def fill_metadata(data, dst_file):
@@ -84,6 +84,60 @@ def center_tile(event, ntile):
     inside_tile = (ixy[0] < ntile) & (ixy[1] < ntile)
     ixy = ixy[:, inside_tile]
     return ixy0, inside_tile, ixy
+
+def tile_normalization(abs_coord, do_exist, shower_core):
+    # Normalization of a tile for DNN
+    n0 = (abs_coord.shape[0] - 1) // 2
+    tile_center = abs_coord[n0, n0]
+    # Shift to the hight of CLF (z)
+    tile_center[2] = 1370
+
+    # Shift shower core
+    shower_core[:2] = shower_core[:2] - tile_center[:2]
+
+    tile_center = tile_center[np.newaxis, np.newaxis, :]
+    rel_coord = np.where(do_exist[:, :, np.newaxis], abs_coord - tile_center, 0)
+
+    # xy coordinate normalization
+    tile_extent = n0 * 1200  # extent of tile
+    rel_coord[:, :, 0:2] = rel_coord[:, :, 0:2] / tile_extent
+    shower_core[:2] = shower_core[:2] / tile_extent
+    # z coordinate normalization
+    height_extent = 30  # +- 30 meters
+    rel_coord[:, :, 2] = rel_coord[:, :, 2] / height_extent
+    shower_core[2] = shower_core[2] / height_extent
+
+    return rel_coord, shower_core
+
+
+def tile_positions(ixy0, tile_size, badsd, shower_core):
+    # Create centered tile
+    # n0 = (tile_size - 1) / 2
+    x, y = np.mgrid[0:tile_size, 0:tile_size].astype(float)
+
+    # Shift towards real center
+    # ixy0 = [24, 10] - at the edge, uncomment for testing
+    x += ixy0[0]
+    y += ixy0[1]
+    xy_code = x * 100 + y
+
+    # Create mask (:, tile_size, tile_size)
+    masks = tasd_clf.tasdmc_clf[:, 0][:, np.newaxis, np.newaxis] == xy_code
+    tasdmc_clf_indices = np.argmax(masks, axis=0)
+    do_exist = masks.any(axis=0)
+    tasdmc_clf_indices = np.where(do_exist, tasdmc_clf_indices, -1)
+
+    # Do detectors work:
+    good = ~np.isin(tasd_clf.tasdmc_clf[tasdmc_clf_indices, 0], badsd)
+    status = np.logical_and(good, do_exist)
+
+    abs_coord = tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:] / 1e2
+    rel_coord, rel_shower_core = tile_normalization(abs_coord, do_exist, shower_core)
+
+    return rel_coord, status, rel_shower_core
+
+
+
 
 
 def detector_readings(sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, data):

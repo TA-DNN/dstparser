@@ -1,6 +1,6 @@
 from tqdm import tqdm
 import numpy as np
-from dst_parser import parse_dst_file
+from dst_parsers import parse_dst_file
 from dstParser import parse_script
 from xmax_reader import XmaxReader
 from read_data import data_files
