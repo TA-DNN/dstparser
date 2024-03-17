@@ -1,11 +1,9 @@
 import numpy as np
 from dst_adapter import parse_dst_file
-from xmax_reader import XmaxReader
 
 
 def test_parser(dst_file):
-    xmax_reader = XmaxReader()
-    data = parse_dst_file(dst_file, xmax_reader)
+    data = parse_dst_file(dst_file)
 
     for key, val in data.items():
         if isinstance(val, np.ndarray):

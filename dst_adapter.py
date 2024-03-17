@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from dst_reader import read_dst_file
+from dst_reader import read_dst_file, read_xmax_data
 from dst_parsers import parse_dst_string
 import tasd_clf
 
@@ -18,16 +18,16 @@ def fill_metadata(data, dst_file):
     return data
 
 
-
 def corsika_id2mass(corsika_pid):
     return np.where(corsika_pid == 14, 1, corsika_pid // 100).astype(np.int32)
 
 
-def shower_params(event_list, data, dst_file, xmax_reader):
+def shower_params(data, dst_lists, xmax_data):
     # Shower related
+    event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])
     data["energy"] = event_list[1]
-    data["xmax"] = xmax_reader(dst_file, data["energy"])
+    data["xmax"] = xmax_data(data["energy"])
     data["shower_axis"] = np.array(
         [
             np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
@@ -85,6 +85,7 @@ def center_tile(event, ntile):
     ixy = ixy[:, inside_tile]
     return ixy0, inside_tile, ixy
 
+
 def tile_normalization(abs_coord, do_exist, shower_core):
     # Normalization of a tile for DNN
     n0 = (abs_coord.shape[0] - 1) // 2
@@ -137,13 +138,10 @@ def tile_positions(ixy0, tile_size, badsd, shower_core):
     return rel_coord, status, rel_shower_core
 
 
-
-
-
-def detector_readings(sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, data):
+def detector_readings(data, dst_lists, ntile):
     ntime_trace = 128  # number of time trace of waveform
     to_nsec = 4 * 1000
-    
+
     num_events = data["mass_number"].shape[0]
     shape = num_events, ntile, ntile
     data["arrival_times"] = np.zeros(shape, dtype=np.float32)
@@ -152,6 +150,8 @@ def detector_readings(sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, data)
     data["detector_states"] = np.zeros(shape, dtype=bool)
 
     empty_events = []
+
+    sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists[1:4]
 
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
@@ -192,8 +192,8 @@ def detector_readings(sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, data)
             data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
         )
 
+    # Remove empty events
     if len(empty_events) != 0:
-        # Remove empty events
         for key, value in data.items():
             if key == "metadata":
                 continue
@@ -201,21 +201,19 @@ def detector_readings(sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, data)
 
     return data
 
-
-def parse_dst_file(dst_file, xmax_reader, ntile=7):
+def parse_dst_file(dst_file, ntile=7):
     #  ntile  # number of SD per one side
     dst_string = read_dst_file(dst_file)
     dst_lists = parse_dst_string(dst_string)
+    xmax_data = read_xmax_data(dst_file)
 
     if dst_lists is None:
         return None
 
-    event_list, sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists
-
     # Dictionary with parsed data
     data = dict()
     data = fill_metadata(data, dst_file)
-    data = shower_params(event_list, data, dst_file, xmax_reader)
-    data = detector_readings(sdmeta_list, sdwaveform_list, badsdinfo_list, ntile, data)
+    data = shower_params(data, dst_lists, xmax_data)
+    data = detector_readings(data, dst_lists, ntile)
 
     return data
