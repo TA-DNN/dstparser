@@ -82,16 +82,6 @@ def parse_sdmeta(sdmeta_list_str):
                      "rufptn_.xyzclf[2]",
                      "rufptn_.vem[0]",
                      "rufptn_.vem[1]"]
-    sdmeta_dict = [
-        [
-            {
-                sdmeta_format[k]: int(sdmeta_list[i][j][k]) if sdmeta_format[k] in ["rufptn_.xxyy", "rufptn_.isgood"] else float(sdmeta_list[i][j][k])
-                for k in range(len(sdmeta_format))
-            }
-            for j in range(len(sdmeta_list[i]))
-        ]
-        for i in range(len(sdmeta_list))
-    ]
     """
 
     ## Detection related
@@ -113,22 +103,6 @@ def parse_sdwaveform(sdwaveform_list_str):
                         "rusdraw_.mclkcnt",
                         "rusdraw_.fadc[0]",
                         "rusdraw_.fadc[1]"]
-    sdwaveform_dict = [
-        [
-            {
-                sdwaveform_format[0]: int(sdwaveform_list[i][j][0]),
-                sdwaveform_format[1]: int(sdwaveform_list[i][j][1]),
-                sdwaveform_format[2]: int(sdwaveform_list[i][j][2]),
-                #f"{sdwaveform_format[3]}[{k}]": int(sdwaveform_list[i][j][3 + k]),
-                #f"{sdwaveform_format[4]}[{k}]": int(sdwaveform_list[i][j][3 + 128 + k])
-                sdwaveform_format[3]: [int(sdwaveform_list[i][j][3 + k]) for k in range(128)],
-                sdwaveform_format[4]: [int(sdwaveform_list[i][j][3 + 128 + k]) for k in range(128)]
-            }
-            for j in range(len(sdwaveform_list[i]))
-            #for k in range(128)
-        ]
-        for i in range(len(sdwaveform_list))
-    ]
     """
 
     record_size = 3 + 128 * 2

@@ -24,6 +24,7 @@ def corsika_id2mass(corsika_pid):
 
 def shower_params(data, dst_lists, xmax_data):
     # Shower related
+    to_meters = 1e-2
     event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])
     data["energy"] = event_list[1]
@@ -38,7 +39,7 @@ def shower_params(data, dst_lists, xmax_data):
     ).transpose()
 
     data["shower_core"] = np.array(
-        event_list[4:7, :].transpose() / 100, dtype=np.float32
+        event_list[4:7, :].transpose() * to_meters, dtype=np.float32
     )
 
     return data
@@ -87,11 +88,15 @@ def center_tile(event, ntile):
 
 
 def tile_normalization(abs_coord, do_exist, shower_core):
+    detector_dist = 1200  # meters
+    height_of_clf = 1370  # meters
+    height_scatter = 30  # meters, +-30 from average
+
     # Normalization of a tile for DNN
     n0 = (abs_coord.shape[0] - 1) // 2
     tile_center = abs_coord[n0, n0]
     # Shift to the hight of CLF (z)
-    tile_center[2] = 1370
+    tile_center[2] = height_of_clf
 
     # Shift shower core
     shower_core[:2] = shower_core[:2] - tile_center[:2]
@@ -100,11 +105,11 @@ def tile_normalization(abs_coord, do_exist, shower_core):
     rel_coord = np.where(do_exist[:, :, np.newaxis], abs_coord - tile_center, 0)
 
     # xy coordinate normalization
-    tile_extent = n0 * 1200  # extent of tile
+    tile_extent = n0 * detector_dist  # extent of tile
     rel_coord[:, :, 0:2] = rel_coord[:, :, 0:2] / tile_extent
     shower_core[:2] = shower_core[:2] / tile_extent
     # z coordinate normalization
-    height_extent = 30  # +- 30 meters
+    height_extent = height_scatter
     rel_coord[:, :, 2] = rel_coord[:, :, 2] / height_extent
     shower_core[2] = shower_core[2] / height_extent
 
@@ -138,7 +143,7 @@ def tile_positions(ixy0, tile_size, badsd, shower_core):
     return rel_coord, status, rel_shower_core
 
 
-def detector_readings(data, dst_lists, ntile):
+def detector_readings(data, dst_lists, ntile, up_low_traces):
     ntime_trace = 128  # number of time trace of waveform
     to_nsec = 4 * 1000
 
@@ -148,6 +153,10 @@ def detector_readings(data, dst_lists, ntile):
     data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
     data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
     data["detector_states"] = np.zeros(shape, dtype=bool)
+
+    if up_low_traces:
+        data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
+        data["time_traces_up"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
 
     empty_events = []
 
@@ -173,6 +182,13 @@ def detector_readings(data, dst_lists, ntile):
         # relative time of first arrived particle
         atimes -= np.min(atimes)
         data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
+
+        if up_low_traces:
+            ttrace = wform[:ntime_trace] / fadc_per_vem_low
+            data["time_traces_low"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+
+            ttrace = wform[ntime_trace:] / fadc_per_vem_up
+            data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
 
         ttrace = (
             wform[:ntime_trace] / fadc_per_vem_low
@@ -201,19 +217,21 @@ def detector_readings(data, dst_lists, ntile):
 
     return data
 
-def parse_dst_file(dst_file, ntile=7):
+
+def parse_dst_file(dst_file, ntile=7, up_low_traces=False):
     #  ntile  # number of SD per one side
     dst_string = read_dst_file(dst_file)
     dst_lists = parse_dst_string(dst_string)
-    xmax_data = read_xmax_data(dst_file)
 
     if dst_lists is None:
         return None
+
+    xmax_data = read_xmax_data(dst_file)
 
     # Dictionary with parsed data
     data = dict()
     data = fill_metadata(data, dst_file)
     data = shower_params(data, dst_lists, xmax_data)
-    data = detector_readings(data, dst_lists, ntile)
+    data = detector_readings(data, dst_lists, ntile, up_low_traces)
 
     return data

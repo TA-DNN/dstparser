@@ -3,7 +3,7 @@ from dst_adapter import parse_dst_file
 
 
 def test_parser(dst_file):
-    data = parse_dst_file(dst_file)
+    data = parse_dst_file(dst_file, up_low_traces=True)
 
     for key, val in data.items():
         if isinstance(val, np.ndarray):
@@ -13,7 +13,7 @@ def test_parser(dst_file):
 
     print(f'energy = {data["energy"]}')
     print(f'xmax = {data["xmax"]}')
-
+    # print(data["time_traces_low"])
 
 if __name__ == "__main__":
     dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/DAT000015_gea.dat.hrspctr.1850.specCuts.dst.gz"
