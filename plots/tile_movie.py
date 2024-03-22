@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
 from pathlib import Path
-from srecog.utils.hdf5_utils import dict_from_file, array_from_file
+from srecog.utils.hdf5_utils import dict_from_file
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
@@ -11,7 +11,7 @@ def order_time_traces(arrival_times, time_traces):
     list_to_sort = []
     for i in range(time_traces.shape[0]):
         for j in range(time_traces.shape[1]):
-            if arrival_times[i, j] > 0:
+            if np.sum(time_traces[i, j]) > 0:
                 list_to_sort.append([arrival_times[i, j], time_traces[i, j]])
     ttraces = sorted(list_to_sort, key=lambda x: x[0])
 
@@ -20,6 +20,7 @@ def order_time_traces(arrival_times, time_traces):
     ttime = np.arange(0, len(ttraces[0][1]) * bin_time, bin_time) * micro_sec
 
     return ttime, ttraces
+
 
 def plot_time_series(arrival_times, time_traces_long):
     lst = []
@@ -72,7 +73,7 @@ def read_events(data_file):
     return dict_from_file(data_file, all_arrays)
 
 
-def event_title(data_file, event_idx):
+def event_title(data_file, event_idx, out_dir=None):
 
     data = dict_from_file(
         data_file,
@@ -90,23 +91,35 @@ def event_title(data_file, event_idx):
     cos_theta = np.dot(shower_axis, z_axis) / np.linalg.norm(shower_axis)
     zenith = np.arccos(np.clip(cos_theta, -1, 1)) * 180 / np.pi
 
-    title = (
-        r"$E$ = %.2f EeV, $\theta$ = %.2f deg, $X_{max}$ = %.2f $g/cm^2$"
-        % (
-            energy,
-            zenith,
-            xmax,
-        )
+    title = r"$E$ = %.2f EeV, $\theta$ = %.2f deg, $X_{max}$ = %.2f $g/cm^2$" % (
+        energy,
+        zenith,
+        xmax,
     )
+
     file_name = Path(data_file).stem
-    file_name = f"{file_name}_{event_idx:03}"
+    dir_name = Path(data_file).parent.name
+    if out_dir is not None:
+        out_dir = Path(out_dir) / dir_name / file_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        file_name = str(out_dir / f"{file_name}_{event_idx:03}")
+    else:
+        file_name = f"{file_name}_{event_idx:03}"
+
     return title, file_name
 
 
 def read_time_traces(data_file, event_idx=0):
     data = dict_from_file(
         data_file,
-        ["time_traces", "detector_states", "arrival_times"],
+        [
+            "time_traces",
+            "detector_states",
+            "arrival_times",
+            "detector_positions",
+            "shower_core",
+            "shower_axis",
+        ],
         indices=slice(event_idx, event_idx + 1),
     )
 
@@ -114,6 +127,8 @@ def read_time_traces(data_file, event_idx=0):
         data[key] = value.squeeze()
 
     data["time_traces"] = np.log10(data["time_traces"] + 1)
+    # print(data["detector_positions"])
+    # print(data["shower_core"])
     return data
 
 
@@ -131,7 +146,7 @@ def extend_time_traces(arrival_times, time_traces):
     for i in range(arrival_times.shape[0]):
         for j in range(arrival_times.shape[1]):
             arrival_pos = arrival_times[i, j]
-            if arrival_pos > 0:
+            if np.sum(time_traces[i, j]) > 0:
                 time_traces_long[i, j, arrival_pos : trace_length + arrival_pos] = (
                     time_traces[i, j]
                 )
@@ -155,11 +170,13 @@ def min_max_vals(time_traces):
     return min_val, max_val
 
 
-
 def tile_signal(
     time_traces,
     arrival_times,
     detector_states,
+    detector_positions,
+    shower_core,
+    shower_axis,
     out_file,
     cmap="Blues",
     scale="Linear",
@@ -174,7 +191,7 @@ def tile_signal(
 
     # Indicies of bad detectors
     bad_detectors = np.stack(np.where(detector_states == False)).transpose()
-    sig_detectors = np.stack(np.where(arrival_times > 0)).transpose()
+    sig_detectors = np.stack(np.where(np.sum(time_traces, axis=-1) > 0)).transpose()
 
     images = []
     time_per_frame = 20 * 1e-3  # milliseconds per frame
@@ -195,9 +212,13 @@ def tile_signal(
     ax.set_yticks(np.arange(ntile))
     ax.set_yticklabels(np.arange(1, ntile + 1))
     
+    # Swap axis, because imshow(ny, nx)
+    time_traces_yx = time_traces.swapaxes(0, 1)
+    arrival_times_yx = arrival_times.swapaxes(0, 1)
+    
     for i in range(time_traces.shape[2]):
         im = ax.imshow(
-            time_traces[:, :, i],
+            time_traces_yx[:, :, i],
             cmap=cmap,
             norm=norm,
             animated=True,
@@ -214,22 +235,49 @@ def tile_signal(
         if i == 0:  # Add color bar only once
             # colormap = plt.get_cmap("winter")
             # colormap1 = plt.get_cmap("jet")
-            colormap = plt.get_cmap("turbo")
+            colormap = plt.get_cmap("rainbow")
             cbar = fig.colorbar(im, cax=cax)
             cbar.set_label(label)  # Set color bar label
             for row, col in bad_detectors:
-                ax.plot(col, row, "rx", markersize=16)
-                   
+                ax.plot(row, col, "rx", markersize=16)
 
-            ttime, ttraces = order_time_traces(arrival_times, time_traces)
-            
+            ttime, ttraces = order_time_traces(arrival_times_yx, time_traces_yx)
+
             max_arr_time = np.max(arrival_times)
-            arr_time_color = arrival_times/max_arr_time
+            arr_time_color = arrival_times / max_arr_time
             for row, col in sig_detectors:
-                ax.plot(col, row, ".", 
-                        markersize=15,
-                        color = colormap(arr_time_color[row, col]))
+                ax.plot(
+                    detector_positions[row, col, 0],
+                    detector_positions[row, col, 1],
+                    ".",
+                    markersize=10,
+                    color=colormap(arr_time_color[row, col]),
+                )
 
+            shower_axis = shower_axis/np.linalg.norm(shower_axis)
+            ax.arrow(
+                shower_core[0] - shower_axis[0],
+                shower_core[1] - shower_axis[1],
+                shower_axis[0]*2,
+                shower_axis[1]*2,
+                head_width=0.1,
+                fc="black",
+                ec="black",
+            )
+            
+            xperp =  -shower_axis[1]
+            yperp =  shower_axis[0]
+            
+            ax.arrow(
+                shower_core[0] - xperp*0.5,
+                shower_core[1] - yperp*0.5,
+                xperp,
+                yperp,
+                fc="black",
+                ec="black",
+            )
+
+            ax.plot(shower_core[0], shower_core[1], "*", markersize=5, color="red")
             # colormap = plt.get_cmap("rainbow")
 
             all_plots = []
@@ -266,6 +314,7 @@ def tile_signal_movie(
     interval=20,
     time_slice=slice(None),
     only_traces=False,
+    out_dir=None,
 ):
     # cmap = "viridis"
     # cmap = "Greys"
@@ -273,29 +322,36 @@ def tile_signal_movie(
     arrival_times = data["arrival_times"]
     time_traces = data["time_traces"]
     detector_states = data["detector_states"]
+    detector_positions = data["detector_positions"]
+    shower_core = data["shower_core"]
+    shower_axis = -data["shower_axis"][:2]
 
-    title, file_name = event_title(data_file, event_idx)
+    detector_positions = (
+        (detector_positions + 1) * (detector_positions.shape[0] - 1) / 2
+    )
+
+    shower_core = (shower_core + 1) * (detector_positions.shape[0] - 1) / 2
+
+    # print(shower_core)
+
+    title, file_name = event_title(data_file, event_idx, out_dir)
 
     if only_traces:
-        tile_signal(
-            time_traces[:, :, time_slice],
-            arrival_times,
-            detector_states=detector_states,
-            out_file=f"{file_name}_trace",
-            cmap=cmap,
-            scale=scale,
-            title=title,
-            interval=interval,
-        )
+        out_file = f"{file_name}_trace"
     else:
-        time_traces_long = extend_time_traces(arrival_times, time_traces)
-        tile_signal(
-            time_traces_long[:, :, time_slice],
-            arrival_times,
-            detector_states=detector_states,
-            out_file=f"{file_name}",
-            cmap=cmap,
-            scale=scale,
-            title=title,
-            interval=interval,
-        )
+        time_traces = extend_time_traces(arrival_times, time_traces)
+        out_file = f"{file_name}"
+
+    tile_signal(
+        time_traces[:, :, time_slice],
+        arrival_times,
+        detector_states=detector_states,
+        detector_positions=detector_positions[:, :, :2],
+        shower_core=shower_core,
+        shower_axis=shower_axis,
+        out_file=out_file,
+        cmap=cmap,
+        scale=scale,
+        title=title,
+        interval=interval,
+    )
