@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.animation as animation
 from pathlib import Path
-from srecog.utils.hdf5_utils import dict_from_file
+from srecog.utils.hdf5_utils import dict_from_file, read_hdf5_metadata, arrays_from_file
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
@@ -73,30 +73,23 @@ def read_events(data_file):
     return dict_from_file(data_file, all_arrays)
 
 
-def event_title(data_file, event_idx, out_dir=None):
-
-    data = dict_from_file(
-        data_file,
-        ["energy", "shower_axis", "xmax"],
-        indices=slice(event_idx, event_idx + 1),
-    )
-    for key, value in data.items():
-        data[key] = value.squeeze()
-
-    energy = data["energy"]
-    shower_axis = data["shower_axis"]
-    xmax = data["xmax"]
-
+def event_title(data):
     z_axis = np.array([0, 0, 1])
-    cos_theta = np.dot(shower_axis, z_axis) / np.linalg.norm(shower_axis)
+    cos_theta = np.dot(data["shower_axis"], z_axis) / np.linalg.norm(
+        data["shower_axis"]
+    )
     zenith = np.arccos(np.clip(cos_theta, -1, 1)) * 180 / np.pi
 
     title = r"$E$ = %.2f EeV, $\theta$ = %.2f deg, $X_{max}$ = %.2f $g/cm^2$" % (
-        energy,
+        data["energy"],
         zenith,
-        xmax,
+        data["xmax"],
     )
 
+    return title
+
+
+def out_file_ta(data_file, event_idx, out_dir=None):
     file_name = Path(data_file).stem
     dir_name = Path(data_file).parent.name
     if out_dir is not None:
@@ -106,13 +99,16 @@ def event_title(data_file, event_idx, out_dir=None):
     else:
         file_name = f"{file_name}_{event_idx:03}"
 
-    return title, file_name
+    return file_name
 
 
-def read_time_traces(data_file, event_idx=0):
+def read_data_ta(data_file, event_idx):
     data = dict_from_file(
         data_file,
         [
+            "energy",
+            "shower_axis",
+            "xmax",
             "time_traces",
             "detector_states",
             "arrival_times",
@@ -127,9 +123,64 @@ def read_time_traces(data_file, event_idx=0):
         data[key] = value.squeeze()
 
     data["time_traces"] = np.log10(data["time_traces"] + 1)
-    # print(data["detector_positions"])
-    # print(data["shower_core"])
     return data
+
+
+def read_event_ta(data_file, event_idx, out_dir=None):
+    data = read_data_ta(data_file, event_idx)
+    out_file = out_file_ta(data_file, event_idx, out_dir)
+    return data, out_file
+
+
+def read_event_toy(data_file, event_idx, out_dir=None):
+    """convert from toy simulation format to new (TA) format"""
+    array_names = []
+    meta_data = read_hdf5_metadata(data_file)
+    for key in meta_data:
+        if key not in ["file", "settings", "detector"]:
+            array_names.append(key)
+
+    idxs = slice(event_idx, event_idx + 1)
+    original_data = dict_from_file(data_file, array_names, indices=idxs)
+
+    data = dict()
+    data["arrival_times"] = original_data["detector_readings"][:, :, :, 0]
+    data["time_traces"] = original_data["time_traces"][:, :, :, :]
+    data["energy"] = original_data["energy"]
+    data["xmax"] = original_data["xmax"]
+    data["shower_axis"] = original_data["showeraxis"]
+    data["shower_core"] = original_data["showercore"]/(4*1200)
+    ntile = data["arrival_times"].shape[1]
+    data["detector_positions"] = arrays_from_file(data_file, "detector").reshape(
+        ntile, ntile, 3
+    ) / (4 * 1200)
+    data["detector_states"] = np.ones((9, 9), dtype=bool)
+
+    for key, value in data.items():
+        data[key] = value.squeeze()
+    
+    print(f'Arrival times in toy DNN {data["arrival_times"]}')
+    print(f'shower_axis {data["shower_axis"]}')
+    print(f'shower_core {data["shower_core"]}')
+    
+    arr = data["arrival_times"]
+    arr[arr == 0] = np.nan
+    arr = arr - np.nanmin(arr)
+    arr = arr/np.nanmax(arr)
+    arr[np.isnan(arr)] = 0
+    data["arrival_times"] = arr*5*1e3
+    print(data["arrival_times"])    
+
+    file_name = "ttrace"
+    dir_name = Path(data_file).stem
+    if out_dir is not None:
+        out_dir = Path(out_dir) / dir_name / file_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        file_name = str(out_dir / f"{file_name}_{event_idx:07}")
+    else:
+        file_name = f"{file_name}_{event_idx:03}"
+
+    return data, file_name
 
 
 def extend_time_traces(arrival_times, time_traces):
@@ -137,6 +188,8 @@ def extend_time_traces(arrival_times, time_traces):
     # arrival times to bins
     nsec_per_bin = 20  # ns
     arrival_times = np.ceil(arrival_times / nsec_per_bin).astype(np.int32)
+    
+    print(arrival_times)
 
     # Create the long time traces
     trace_length = time_traces.shape[2]
@@ -211,10 +264,12 @@ def tile_signal(
 
     ax.set_yticks(np.arange(ntile))
     ax.set_yticklabels(np.arange(1, ntile + 1))
-    
+
     # Swap axis, because imshow(ny, nx)
     time_traces_yx = time_traces.swapaxes(0, 1)
     arrival_times_yx = arrival_times.swapaxes(0, 1)
+
+    print(f"Len = {time_traces.shape[2]}")
     
     for i in range(time_traces.shape[2]):
         im = ax.imshow(
@@ -254,23 +309,23 @@ def tile_signal(
                     color=colormap(arr_time_color[row, col]),
                 )
 
-            shower_axis = shower_axis/np.linalg.norm(shower_axis)
+            shower_axis = shower_axis / np.linalg.norm(shower_axis)
             ax.arrow(
                 shower_core[0] - shower_axis[0],
                 shower_core[1] - shower_axis[1],
-                shower_axis[0]*2,
-                shower_axis[1]*2,
+                shower_axis[0] * 2,
+                shower_axis[1] * 2,
                 head_width=0.1,
                 fc="black",
                 ec="black",
             )
-            
-            xperp =  -shower_axis[1]
-            yperp =  shower_axis[0]
-            
+
+            xperp = -shower_axis[1]
+            yperp = shower_axis[0]
+
             ax.arrow(
-                shower_core[0] - xperp*0.5,
-                shower_core[1] - yperp*0.5,
+                shower_core[0] - xperp * 0.5,
+                shower_core[1] - yperp * 0.5,
                 xperp,
                 yperp,
                 fc="black",
@@ -315,10 +370,18 @@ def tile_signal_movie(
     time_slice=slice(None),
     only_traces=False,
     out_dir=None,
+    in_file_format="TA",
 ):
     # cmap = "viridis"
     # cmap = "Greys"
-    data = read_time_traces(data_file, event_idx)
+    if in_file_format == "TA":
+        data, out_file = read_event_ta(data_file, event_idx, out_dir)
+    elif in_file_format == "TOY":
+        data, out_file = read_event_toy(data_file, event_idx, out_dir)
+    else:
+        raise ValueError(f"{in_file_format} is unknown")
+
+    title = event_title(data)
     arrival_times = data["arrival_times"]
     time_traces = data["time_traces"]
     detector_states = data["detector_states"]
@@ -332,15 +395,10 @@ def tile_signal_movie(
 
     shower_core = (shower_core + 1) * (detector_positions.shape[0] - 1) / 2
 
-    # print(shower_core)
-
-    title, file_name = event_title(data_file, event_idx, out_dir)
-
     if only_traces:
-        out_file = f"{file_name}_trace"
+        out_file = f"{out_file}_trace"
     else:
         time_traces = extend_time_traces(arrival_times, time_traces)
-        out_file = f"{file_name}"
 
     tile_signal(
         time_traces[:, :, time_slice],

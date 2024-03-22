@@ -3,7 +3,7 @@ from srecog.slurm.slurm_launcher import output_env, run_job
 
 
 root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/03"
-out_dir = root_dir + "/03_ttrace_movie/02_TA_9x9"
+out_dir = root_dir + "/03_ttrace_movie/08_TA_9x9"
 res_name = "proc"
 res_dir = out_dir + f"/results/{res_name}"
 
@@ -16,7 +16,7 @@ slurm_directives = {
     "ntasks": 1,
     "mem": "3gb",
     "cpus-per-task": 1,
-    "partition": "edr1_short_serial",
+    "partition": "short_serial",
     "time": "01:00:00",
     "output": output_file,
     "error": error_file,
