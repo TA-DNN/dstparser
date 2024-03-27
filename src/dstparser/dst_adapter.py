@@ -94,7 +94,7 @@ def tile_normalization(abs_coord, do_exist, shower_core):
 
     # Normalization of a tile for DNN
     n0 = (abs_coord.shape[0] - 1) // 2
-    tile_center = abs_coord[n0, n0]
+    tile_center = np.copy(abs_coord[n0, n0])
     # Shift to the hight of CLF (z)
     tile_center[2] = height_of_clf
 
@@ -157,6 +157,8 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     if up_low_traces:
         data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
         data["time_traces_up"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
+        data["arrival_time_low"] = np.zeros(shape, dtype=np.float32)
+        data["arrival_time_up"] = np.zeros(shape, dtype=np.float32)
 
     empty_events = []
 
@@ -179,8 +181,8 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
 
         # averaged arrival times
         atimes = (event[2] + event[3]) / 2
-        # relative time of first arrived particle
-        atimes -= np.min(atimes)
+        # # relative time of first arrived particle
+        # atimes -= np.min(atimes)
         data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
 
         if up_low_traces:
@@ -189,6 +191,13 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
 
             ttrace = wform[ntime_trace:] / fadc_per_vem_up
             data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+
+            data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
+                event[2][inside_tile] * to_nsec
+            )
+            data["arrival_times_up"][ievt, ixy[0], ixy[1]] = (
+                event[3][inside_tile] * to_nsec
+            )
 
         ttrace = (
             wform[:ntime_trace] / fadc_per_vem_low
@@ -205,8 +214,18 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
         ) = tile_positions(ixy0, ntile, badsd, shower_core)
 
         data["arrival_times"][ievt, :, :] = np.where(
-            data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
+            data["detector_states"][ievt, :, :],
+            data["arrival_times_low"][ievt, :, :],
+            0,
         )
+
+        if up_low_traces:
+            for arrv_array_name in ["arrival_times_low", "arrival_times_up"]:
+                data[arrv_array_name][ievt, :, :] = np.where(
+                    data["detector_states"][ievt, :, :],
+                    data[arrv_array_name][ievt, :, :],
+                    0,
+                )
 
     # Remove empty events
     if len(empty_events) != 0:
