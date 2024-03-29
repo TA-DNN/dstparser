@@ -82,7 +82,7 @@ def center_tile(event, ntile):
     ixy0 = np.copy(ixy[:, max_signal_idx]) - (ntile - 1) // 2
     ixy -= ixy0[:, np.newaxis]
     # cut array size to fit the tile size
-    inside_tile = (ixy[0] < ntile) & (ixy[1] < ntile)
+    inside_tile = (ixy[0] < ntile) & (ixy[1] < ntile) & (ixy[0] >= 0) & (ixy[1] >= 0)
     ixy = ixy[:, inside_tile]
     return ixy0, inside_tile, ixy
 
@@ -140,7 +140,7 @@ def tile_positions(ixy0, tile_size, badsd, shower_core):
     abs_coord = tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:] / 1e2
     rel_coord, rel_shower_core = tile_normalization(abs_coord, do_exist, shower_core)
 
-    return rel_coord, status, rel_shower_core
+    return rel_coord, status, do_exist, good, rel_shower_core
 
 
 def detector_readings(data, dst_lists, ntile, up_low_traces):
@@ -153,6 +153,8 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
     data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
     data["detector_states"] = np.zeros(shape, dtype=bool)
+    data["detector_exists"] = np.zeros(shape, dtype=bool)
+    data["detector_good"] = np.zeros(shape, dtype=bool)
 
     if up_low_traces:
         data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
@@ -210,6 +212,8 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
         (
             data["detector_positions"][ievt, :, :],
             data["detector_states"][ievt, :, :],
+            data["detector_exists"][ievt, :, :],
+            data["detector_good"][ievt, :, :],
             data["shower_core"][ievt][:],
         ) = tile_positions(ixy0, ntile, badsd, shower_core)
 
