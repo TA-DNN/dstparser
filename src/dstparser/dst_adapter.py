@@ -157,8 +157,8 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     if up_low_traces:
         data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
         data["time_traces_up"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
-        data["arrival_time_low"] = np.zeros(shape, dtype=np.float32)
-        data["arrival_time_up"] = np.zeros(shape, dtype=np.float32)
+        data["arrival_times_low"] = np.zeros(shape, dtype=np.float32)
+        data["arrival_times_up"] = np.zeros(shape, dtype=np.float32)
 
     empty_events = []
 
@@ -214,9 +214,7 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
         ) = tile_positions(ixy0, ntile, badsd, shower_core)
 
         data["arrival_times"][ievt, :, :] = np.where(
-            data["detector_states"][ievt, :, :],
-            data["arrival_times_low"][ievt, :, :],
-            0,
+            data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
         )
 
         if up_low_traces:
