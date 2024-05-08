@@ -58,3 +58,9 @@ class XmaxReader:
         else:
             elong_rate = 45.8  # elongation rate for QGSJetII
             return self._xmax0 + elong_rate * np.log10(energies / self._en0)
+
+
+class XmaxReaderEmpty(XmaxReader):
+    def _read_file(self, file_name):
+        self._xmax0 = None
+        self._en0 = None

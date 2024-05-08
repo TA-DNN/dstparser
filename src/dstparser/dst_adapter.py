@@ -5,13 +5,18 @@ from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
 
 
-def fill_metadata(data, dst_file):
+def default_metadata():
     meta_data = dict()
     meta_data["interaction_model"] = "QGSJET-II-03"
     meta_data["atmosphere_model"] = None
     meta_data["emin"] = None
     meta_data["emax"] = None
     meta_data["espectrum"] = "HiRes"
+
+
+def fill_metadata(data, dst_file, meta_data=None):
+    if meta_data is None:
+        meta_data = default_metadata()
     meta_data["dst_file_name"] = dst_file
 
     data["metadata"] = json.dumps(meta_data, indent=4)
@@ -239,7 +244,7 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     return data
 
 
-def parse_dst_file(dst_file, ntile=7, up_low_traces=False):
+def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False):
     #  ntile  # number of SD per one side
     dst_string = read_dst_file(dst_file)
     dst_lists = parse_dst_string(dst_string)
@@ -251,7 +256,7 @@ def parse_dst_file(dst_file, ntile=7, up_low_traces=False):
 
     # Dictionary with parsed data
     data = dict()
-    data = fill_metadata(data, dst_file)
+    data = fill_metadata(data, dst_file, meta_data)
     data = shower_params(data, dst_lists, xmax_data)
     data = detector_readings(data, dst_lists, ntile, up_low_traces)
 

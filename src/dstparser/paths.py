@@ -9,3 +9,8 @@ xmax_data_dir = (
     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
     "qgsii03proton/080511_230511/noCuts_HiResSpectrum/"
 )
+
+xmax_data_dir_fe = (
+    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+    "qgsii04iron/080417_160603/Em1/"
+)
