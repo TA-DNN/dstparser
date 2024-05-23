@@ -5,13 +5,18 @@ from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
 
 
-def fill_metadata(data, dst_file):
+def default_metadata():
     meta_data = dict()
     meta_data["interaction_model"] = "QGSJET-II-03"
     meta_data["atmosphere_model"] = None
     meta_data["emin"] = None
     meta_data["emax"] = None
     meta_data["espectrum"] = "HiRes"
+
+
+def fill_metadata(data, dst_file, meta_data=None):
+    if meta_data is None:
+        meta_data = default_metadata()
     meta_data["dst_file_name"] = dst_file
 
     data["metadata"] = json.dumps(meta_data, indent=4)
@@ -82,7 +87,7 @@ def center_tile(event, ntile):
     ixy0 = np.copy(ixy[:, max_signal_idx]) - (ntile - 1) // 2
     ixy -= ixy0[:, np.newaxis]
     # cut array size to fit the tile size
-    inside_tile = (ixy[0] < ntile) & (ixy[1] < ntile)
+    inside_tile = (ixy[0] < ntile) & (ixy[1] < ntile) & (ixy[0] >= 0) & (ixy[1] >= 0)
     ixy = ixy[:, inside_tile]
     return ixy0, inside_tile, ixy
 
@@ -94,7 +99,7 @@ def tile_normalization(abs_coord, do_exist, shower_core):
 
     # Normalization of a tile for DNN
     n0 = (abs_coord.shape[0] - 1) // 2
-    tile_center = abs_coord[n0, n0]
+    tile_center = np.copy(abs_coord[n0, n0])
     # Shift to the hight of CLF (z)
     tile_center[2] = height_of_clf
 
@@ -140,7 +145,7 @@ def tile_positions(ixy0, tile_size, badsd, shower_core):
     abs_coord = tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:] / 1e2
     rel_coord, rel_shower_core = tile_normalization(abs_coord, do_exist, shower_core)
 
-    return rel_coord, status, rel_shower_core
+    return rel_coord, status, do_exist, good, rel_shower_core
 
 
 def detector_readings(data, dst_lists, ntile, up_low_traces):
@@ -153,10 +158,14 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
     data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
     data["detector_states"] = np.zeros(shape, dtype=bool)
+    data["detector_exists"] = np.zeros(shape, dtype=bool)
+    data["detector_good"] = np.zeros(shape, dtype=bool)
 
     if up_low_traces:
         data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
         data["time_traces_up"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
+        data["arrival_times_low"] = np.zeros(shape, dtype=np.float32)
+        data["arrival_times_up"] = np.zeros(shape, dtype=np.float32)
 
     empty_events = []
 
@@ -179,8 +188,8 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
 
         # averaged arrival times
         atimes = (event[2] + event[3]) / 2
-        # relative time of first arrived particle
-        atimes -= np.min(atimes)
+        # # relative time of first arrived particle
+        # atimes -= np.min(atimes)
         data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
 
         if up_low_traces:
@@ -189,6 +198,13 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
 
             ttrace = wform[ntime_trace:] / fadc_per_vem_up
             data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+
+            data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
+                event[2][inside_tile] * to_nsec
+            )
+            data["arrival_times_up"][ievt, ixy[0], ixy[1]] = (
+                event[3][inside_tile] * to_nsec
+            )
 
         ttrace = (
             wform[:ntime_trace] / fadc_per_vem_low
@@ -201,12 +217,22 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
         (
             data["detector_positions"][ievt, :, :],
             data["detector_states"][ievt, :, :],
+            data["detector_exists"][ievt, :, :],
+            data["detector_good"][ievt, :, :],
             data["shower_core"][ievt][:],
         ) = tile_positions(ixy0, ntile, badsd, shower_core)
 
         data["arrival_times"][ievt, :, :] = np.where(
             data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
         )
+
+        if up_low_traces:
+            for arrv_array_name in ["arrival_times_low", "arrival_times_up"]:
+                data[arrv_array_name][ievt, :, :] = np.where(
+                    data["detector_states"][ievt, :, :],
+                    data[arrv_array_name][ievt, :, :],
+                    0,
+                )
 
     # Remove empty events
     if len(empty_events) != 0:
@@ -218,7 +244,7 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     return data
 
 
-def parse_dst_file(dst_file, ntile=7, up_low_traces=False):
+def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False):
     #  ntile  # number of SD per one side
     dst_string = read_dst_file(dst_file)
     dst_lists = parse_dst_string(dst_string)
@@ -230,7 +256,7 @@ def parse_dst_file(dst_file, ntile=7, up_low_traces=False):
 
     # Dictionary with parsed data
     data = dict()
-    data = fill_metadata(data, dst_file)
+    data = fill_metadata(data, dst_file, meta_data)
     data = shower_params(data, dst_lists, xmax_data)
     data = detector_readings(data, dst_lists, ntile, up_low_traces)
 
