@@ -8,7 +8,7 @@ from dstparser.paths import (
     dst_reader,
     sd_analysis_env,
     xmax_data_files,
-    xmax_data_dir,
+    xmax_data_dir_prot,
     xmax_data_dir_fe,
 )
 
@@ -20,12 +20,18 @@ for env_var, path_var in changed_env_paths(sd_analysis_env).items():
 
 # Loading data for xmax
 # xmax_data = XmaxReader(xmax_data_dir, xmax_data_files)
-xmax_data_fe = XmaxReader(xmax_data_dir_fe, xmax_data_files)
+xmax_data_prot = XmaxReader(xmax_data_dir_prot, xmax_data_files)
+# xmax_data_fe = XmaxReader(xmax_data_dir_fe, xmax_data_files)
+
+
+# def read_xmax_data(dst_filename):
+#     xmax_data_fe._read_file(dst_filename)
+#     return xmax_data_fe
 
 
 def read_xmax_data(dst_filename):
-    xmax_data_fe._read_file(dst_filename)
-    return xmax_data_fe
+    xmax_data_prot._read_file(dst_filename)
+    return xmax_data_prot
 
 
 def read_dst_file(dst_filename):

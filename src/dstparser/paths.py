@@ -5,9 +5,9 @@ sd_analysis_env = "sdanalysis_env.sh"
 
 # Data for xmax
 xmax_data_files = "DAT*_xmax.txt"
-xmax_data_dir = (
+xmax_data_dir_prot = (
     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
-    "qgsii03proton/080511_230511/noCuts_HiResSpectrum/"
+    "qgsii04proton/080417_160603/Em1/"
 )
 
 xmax_data_dir_fe = (
