@@ -27,8 +27,27 @@ def corsika_id2mass(corsika_pid):
     return np.where(corsika_pid == 14, 1, corsika_pid // 100).astype(np.int32)
 
 
-def shower_params(data, dst_lists, xmax_data):
+def rec_coreposition_to_CLF_meters(core_position_rec,
+                                  option):
+    if option == "x":
+        return 1200 * (core_position_rec - 12.2435)
+    elif option == "y":
+        return 1200 * (core_position_rec - 16.4406)
+    elif option == "dx":
+        return 1200 * core_position_rec
+    elif option == "dy":
+        return 1200 * core_position_rec
+
+
+def pointing_direction_error(theta, dtheta, dphi):
+    return np.sqrt(dtheta * dtheta 
+                   + np.sin(theta * np.pi/180) * np.sin(theta * np.pi/180) * dphi * dphi)
+
+
+def shower_params(data, dst_lists, xmax_data, if_add_standard_recon):
     # Shower related
+    # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
+
     to_meters = 1e-2
     event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])
@@ -46,7 +65,48 @@ def shower_params(data, dst_lists, xmax_data):
     data["shower_core"] = np.array(
         event_list[4:7, :].transpose() * to_meters, dtype=np.float32
     )
-
+    
+    if if_add_standard_recon:
+        data["nstclust"] = event_list[9] # number of SDs in sapce-time cluster
+        data["energy_rec"] = event_list[12] # [EeV]
+        data["LDF_scale_rec"] = event_list[13] 
+        data["d_LDF_scale_rec"] = event_list[14] 
+        data["chi2_LDF"] = event_list[15]
+        data["ndof_LDF"] = event_list[16]
+        data["shower_core_rec"] = np.array(
+            [
+                rec_coreposition_to_CLF_meters(event_list[17],
+                                              option = "x"),
+                rec_coreposition_to_CLF_meters(event_list[19],
+                                              option = "y")
+            ]
+        )
+        # data["d_shower_core_rec"] = np.array(
+        #     [
+        #         rec_coreposition_to_CLF_meters(event_list[18],
+        #                                       option = "dx"),
+        #         rec_coreposition_to_CLF_meters(event_list[20],
+        #                                       option = "dy")
+        #     ]
+        # )
+        data["s800_rec"] = event_list[21]        
+        data["shower_axis_rec"] = np.array(
+            [
+                np.sin(event_list[22] * np.pi/180) * np.cos(event_list[23] * np.pi/180 + np.pi),
+                np.sin(event_list[22] * np.pi/180) * np.sin(event_list[23] * np.pi/180 + np.pi),
+                np.cos(event_list[22] * np.pi/180),
+            ],
+            dtype=np.float32,
+        ).transpose()
+        data["point_dir_err"] = pointing_direction_error(event_list[22],
+                                                         event_list[24],
+                                                         event_list[25]) # [deg]
+        data["chi2_geom"] = event_list[26]
+        data["ndof_geom"] = event_list[27]
+        # data["shower_time"] = event_list[28]
+        # data["d_shower_time"] = event_list[29]
+        data["border_distance"] = event_list[30] # in 1,200 meter unit
+        data["border_distance_Tshape"] = event_list[31] # in 1,200 meter unit
     return data
 
 
@@ -244,9 +304,9 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     return data
 
 
-def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False):
+def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False, if_add_standard_recon=False):
     #  ntile  # number of SD per one side
-    dst_string = read_dst_file(dst_file)
+    dst_string = read_dst_file(dst_file, if_add_standard_recon)
     dst_lists = parse_dst_string(dst_string)
 
     if dst_lists is None:
@@ -257,7 +317,7 @@ def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False):
     # Dictionary with parsed data
     data = dict()
     data = fill_metadata(data, dst_file, meta_data)
-    data = shower_params(data, dst_lists, xmax_data)
+    data = shower_params(data, dst_lists, xmax_data, if_add_standard_recon)
     data = detector_readings(data, dst_lists, ntile, up_low_traces)
 
     return data

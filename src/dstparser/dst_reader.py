@@ -6,6 +6,8 @@ from dstparser.xmax_reader import XmaxReader
 from dstparser.paths import (
     root_dir,
     dst_reader,
+    dst_reader_add_standard_recon,
+    dst_reader_all_events,
     sd_analysis_env,
     xmax_data_files,
     xmax_data_dir_prot,
@@ -34,10 +36,14 @@ def read_xmax_data(dst_filename):
     return xmax_data_prot
 
 
-def read_dst_file(dst_filename):
+def read_dst_file(dst_filename, if_add_standard_recon):
+    if if_add_standard_recon:
+        dst_reader_process = dst_reader_add_standard_recon
+    else:
+        dst_reader_process = dst_reader
     try:
         process = subprocess.Popen(
-            [dst_reader, dst_filename],
+            [dst_reader_process, dst_filename],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
