@@ -36,8 +36,8 @@ def read_xmax_data(dst_filename):
     return xmax_data_prot
 
 
-def read_dst_file(dst_filename, if_add_standard_recon):
-    if if_add_standard_recon:
+def read_dst_file(dst_filename, add_standard_recon):
+    if add_standard_recon:
         dst_reader_process = dst_reader_add_standard_recon
     else:
         dst_reader_process = dst_reader

@@ -29,22 +29,19 @@ def corsika_id2mass(corsika_pid):
 
 def rec_coreposition_to_CLF_meters(core_position_rec,
                                   option):
+    detector_dist = 1200  # meters
+    clf_origin_x = 12.2435
+    clf_origin_y = 16.4406
     if option == "x":
-        return 1200 * (core_position_rec - 12.2435)
+        return detector_dist * (core_position_rec - clf_origin_x)
     elif option == "y":
-        return 1200 * (core_position_rec - 16.4406)
+        return detector_dist * (core_position_rec - clf_origin_y)
     elif option == "dx":
-        return 1200 * core_position_rec
+        return detector_dist * core_position_rec
     elif option == "dy":
-        return 1200 * core_position_rec
+        return detector_dist * core_position_rec
 
-
-def pointing_direction_error(theta, dtheta, dphi):
-    return np.sqrt(dtheta * dtheta 
-                   + np.sin(theta * np.pi/180) * np.sin(theta * np.pi/180) * dphi * dphi)
-
-
-def shower_params(data, dst_lists, xmax_data, if_add_standard_recon):
+def shower_params(data, dst_lists, xmax_data, add_standard_recon):
     # Shower related
     # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
 
@@ -66,14 +63,24 @@ def shower_params(data, dst_lists, xmax_data, if_add_standard_recon):
         event_list[4:7, :].transpose() * to_meters, dtype=np.float32
     )
     
-    if if_add_standard_recon:
-        data["nstclust"] = event_list[9] # number of SDs in sapce-time cluster
-        data["energy_rec"] = event_list[12] # [EeV]
-        data["LDF_scale_rec"] = event_list[13] 
-        data["d_LDF_scale_rec"] = event_list[14] 
-        data["chi2_LDF"] = event_list[15]
-        data["ndof_LDF"] = event_list[16]
-        data["shower_core_rec"] = np.array(
+    if add_standard_recon:
+        # dictionary for standard-reconstructed values
+        data["std_recon"] = dict()
+        # number of SDs in sapce-time cluster
+        data["std_recon"]["nstclust"] = event_list[9]
+        # energy reconstructed by the standard energy estimation table [EeV]
+        data["std_recon"]["energy_rec"] = event_list[12] 
+        # reconstructed scale of the Lateral Distribution Function (LDF) fit [VEM m-2]
+        data["std_recon"]["LDF_scale_rec"] = event_list[13] 
+        # uncertainty of the scale [VEM m-2]
+        data["std_recon"]["d_LDF_scale_rec"] = event_list[14] 
+        # chi-square of the LDF fit
+        data["std_recon"]["chi2_LDF"] = event_list[15]
+        # the number of degree of freedom of the LDF fit (= n - 3),
+        # where "n" is the number of the SDs used for the LDF fit
+        data["std_recon"]["ndof_LDF"] = event_list[16]
+        # core position (x, y) reconstructed by the LDF fit in CLF coordinate [m]
+        data["std_recon"]["shower_core_rec"] = np.array(
             [
                 rec_coreposition_to_CLF_meters(event_list[17],
                                               option = "x"),
@@ -81,7 +88,8 @@ def shower_params(data, dst_lists, xmax_data, if_add_standard_recon):
                                               option = "y")
             ]
         )
-        # data["d_shower_core_rec"] = np.array(
+        # uncertainty of the core position (x, y) reconstructed by the LDF fit
+        # data["std_recon"]["d_shower_core_rec"] = np.array(
         #     [
         #         rec_coreposition_to_CLF_meters(event_list[18],
         #                                       option = "dx"),
@@ -89,24 +97,31 @@ def shower_params(data, dst_lists, xmax_data, if_add_standard_recon):
         #                                       option = "dy")
         #     ]
         # )
-        data["s800_rec"] = event_list[21]        
-        data["shower_axis_rec"] = np.array(
+        # S800 (particle density at 800 m from the shower axis) [VEM m-2]
+        data["std_recon"]["s800_rec"] = event_list[21]   
+        # 3-d unit vector of the arrival direction (pointing back to the source)
+        data["std_recon"]["shower_axis_rec"] = np.array(
             [
-                np.sin(event_list[22] * np.pi/180) * np.cos(event_list[23] * np.pi/180 + np.pi),
-                np.sin(event_list[22] * np.pi/180) * np.sin(event_list[23] * np.pi/180 + np.pi),
-                np.cos(event_list[22] * np.pi/180),
+                np.sin(np.deg2rad(event_list[22])) * np.cos(np.deg2rad(event_list[23]) + np.pi),
+                np.sin(np.deg2rad(event_list[22])) * np.sin(np.deg2rad(event_list[23]) + np.pi),
+                np.cos(np.deg2rad(event_list[22])),
             ],
             dtype=np.float32,
         ).transpose()
-        data["point_dir_err"] = pointing_direction_error(event_list[22],
-                                                         event_list[24],
-                                                         event_list[25]) # [deg]
-        data["chi2_geom"] = event_list[26]
-        data["ndof_geom"] = event_list[27]
-        # data["shower_time"] = event_list[28]
-        # data["d_shower_time"] = event_list[29]
-        data["border_distance"] = event_list[30] # in 1,200 meter unit
-        data["border_distance_Tshape"] = event_list[31] # in 1,200 meter unit
+        # uncertainty of the pointing direction [degree]
+        data["std_recon"]["point_dir_err"] = np.sqrt(event_list[24] * event_list[24] 
+                                        + np.sin(np.deg2rad(event_list[22])) * np.sin(np.deg2rad(event_list[22])) * event_list[25] * event_list[25])
+        # chi-square of the geometry fit
+        data["std_recon"]["chi2_geom"] = event_list[26]
+        # the number of degree of freedom of the geometry fit (= n - 5),
+        # where "n" is the number of the SDs used for the geometry fit
+        data["std_recon"]["ndof_geom"] = event_list[27]
+        # distance b/w the reconstructed core and the edge from the TA SD array [in 1,200 meter unit]
+        # negative for events with the core outside of the TA SD array.
+        data["std_recon"]["border_distance"] = event_list[30]
+        # distance to the T-shape TA SD array, edge of the sub-arrays [in 1,200 meter unit]
+        # this value is used as "border_distance" before implementation of the boundary trigger (on 2008/11/11)
+        data["std_recon"]["border_distance_Tshape"] = event_list[31] 
     return data
 
 
@@ -304,9 +319,9 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
     return data
 
 
-def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False, if_add_standard_recon=False):
+def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False, add_standard_recon=False):
     #  ntile  # number of SD per one side
-    dst_string = read_dst_file(dst_file, if_add_standard_recon)
+    dst_string = read_dst_file(dst_file, add_standard_recon)
     dst_lists = parse_dst_string(dst_string)
 
     if dst_lists is None:
@@ -317,7 +332,7 @@ def parse_dst_file(dst_file, meta_data, ntile=7, up_low_traces=False, if_add_sta
     # Dictionary with parsed data
     data = dict()
     data = fill_metadata(data, dst_file, meta_data)
-    data = shower_params(data, dst_lists, xmax_data, if_add_standard_recon)
+    data = shower_params(data, dst_lists, xmax_data, add_standard_recon)
     data = detector_readings(data, dst_lists, ntile, up_low_traces)
 
     return data
