@@ -7,9 +7,7 @@ from dstparser.read_data import data_files
 class XmaxReader:
     def __init__(self, xmax_data_dir, xmax_data_files):
 
-        xmax_files = data_files(
-            data_dir=xmax_data_dir, glob_pattern=f"**/{xmax_data_files}"
-        )
+        xmax_files = data_files(data_dir=xmax_data_dir, glob_pattern=xmax_data_files)
 
         file_idx = []
         all_xmax = []
@@ -38,7 +36,7 @@ class XmaxReader:
         else:
             return ""
 
-    def _read_file(self, file_name):
+    def read_file(self, file_name):
         file_name = Path(file_name)
         file_idx = self._extract_idx(file_name)
         en0 = self.en_bins[int(file_idx[-2:])]
@@ -61,6 +59,6 @@ class XmaxReader:
 
 
 class XmaxReaderEmpty(XmaxReader):
-    def _read_file(self, file_name):
+    def read_file(self, file_name):
         self._xmax0 = None
         self._en0 = None
