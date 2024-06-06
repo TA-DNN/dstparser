@@ -348,6 +348,11 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
         for key, value in data.items():
             if key == "metadata":
                 continue
+
+            if key == "std_recon":
+                for key_std, value_std in value.items():
+                    data[key][key_std] = np.delete(value_std, empty_events, axis=0)
+                continue
             data[key] = np.delete(value, empty_events, axis=0)
 
     return data
