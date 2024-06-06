@@ -48,6 +48,7 @@ def shower_params(data, dst_lists, xmax_data, add_standard_recon):
     to_meters = 1e-2
     event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])
+
     data["energy"] = event_list[1]
     data["xmax"] = xmax_data(data["energy"])
     data["shower_axis"] = np.array(
@@ -69,36 +70,35 @@ def shower_params(data, dst_lists, xmax_data, add_standard_recon):
         # number of SDs in sapce-time cluster
         data["std_recon"]["nstclust"] = event_list[9]
         # energy reconstructed by the standard energy estimation table [EeV]
-        data["std_recon"]["energy_rec"] = event_list[12]
+        data["std_recon"]["energy"] = event_list[12]
         # reconstructed scale of the Lateral Distribution Function (LDF) fit [VEM m-2]
-        data["std_recon"]["LDF_scale_rec"] = event_list[13]
+        data["std_recon"]["LDF_scale"] = event_list[13]
         # uncertainty of the scale [VEM m-2]
-        data["std_recon"]["d_LDF_scale_rec"] = event_list[14]
+        data["std_recon"]["LDF_scale_err"] = event_list[14]
         # chi-square of the LDF fit
-        data["std_recon"]["chi2_LDF"] = event_list[15]
+        data["std_recon"]["LDF_chi2"] = event_list[15]
         # the number of degree of freedom of the LDF fit (= n - 3),
         # where "n" is the number of the SDs used for the LDF fit
-        data["std_recon"]["ndof_LDF"] = event_list[16]
+        data["std_recon"]["LDF_ndof"] = event_list[16]
         # core position (x, y) reconstructed by the LDF fit in CLF coordinate [m]
-        data["std_recon"]["shower_core_rec"] = np.array(
+        data["std_recon"]["shower_core"] = np.array(
             [
                 rec_coreposition_to_CLF_meters(event_list[17], option="x"),
                 rec_coreposition_to_CLF_meters(event_list[19], option="y"),
             ]
-        )
+        ).transpose(1, 0)
+
         # uncertainty of the core position (x, y) reconstructed by the LDF fit
-        # data["std_recon"]["d_shower_core_rec"] = np.array(
-        #     [
-        #         rec_coreposition_to_CLF_meters(event_list[18],
-        #                                       option = "dx"),
-        #         rec_coreposition_to_CLF_meters(event_list[20],
-        #                                       option = "dy")
-        #     ]
-        # )
+        data["std_recon"]["shower_core_err"] = np.array(
+            [
+                rec_coreposition_to_CLF_meters(event_list[18], option="dx"),
+                rec_coreposition_to_CLF_meters(event_list[20], option="dy"),
+            ]
+        ).transpose(1, 0)
         # S800 (particle density at 800 m from the shower axis) [VEM m-2]
-        data["std_recon"]["s800_rec"] = event_list[21]
+        data["std_recon"]["s800"] = event_list[21]
         # 3-d unit vector of the arrival direction (pointing back to the source)
-        data["std_recon"]["shower_axis_rec"] = np.array(
+        data["std_recon"]["shower_axis"] = np.array(
             [
                 np.sin(np.deg2rad(event_list[22]))
                 * np.cos(np.deg2rad(event_list[23]) + np.pi),
@@ -109,7 +109,10 @@ def shower_params(data, dst_lists, xmax_data, add_standard_recon):
             dtype=np.float32,
         ).transpose()
         # uncertainty of the pointing direction [degree]
-        data["std_recon"]["point_dir_err"] = np.sqrt(
+        # event_list[22] is zenith angle in deg
+        # event_list[24] is uncertainty zenith angle in deg
+        # event_list[25] is uncertainty azimuth angle in deg
+        data["std_recon"]["shower_axis_err"] = np.sqrt(
             event_list[24] * event_list[24]
             + np.sin(np.deg2rad(event_list[22]))
             * np.sin(np.deg2rad(event_list[22]))
@@ -117,10 +120,10 @@ def shower_params(data, dst_lists, xmax_data, add_standard_recon):
             * event_list[25]
         )
         # chi-square of the geometry fit
-        data["std_recon"]["chi2_geom"] = event_list[26]
+        data["std_recon"]["geom_chi2"] = event_list[26]
         # the number of degree of freedom of the geometry fit (= n - 5),
         # where "n" is the number of the SDs used for the geometry fit
-        data["std_recon"]["ndof_geom"] = event_list[27]
+        data["std_recon"]["geom_ndof"] = event_list[27]
         # distance b/w the reconstructed core and the edge from the TA SD array [in 1,200 meter unit]
         # negative for events with the core outside of the TA SD array.
         data["std_recon"]["border_distance"] = event_list[30]
@@ -173,7 +176,9 @@ def center_tile(event, ntile):
     return ixy0, inside_tile, ixy
 
 
-def tile_normalization(abs_coord, do_exist, shower_core):
+def tile_normalization(
+    abs_coord, do_exist, shower_core, stdrec_shower_core, stdrec_shower_core_err
+):
     detector_dist = 1200  # meters
     height_of_clf = 1370  # meters
     height_scatter = 30  # meters, +-30 from average
@@ -186,7 +191,7 @@ def tile_normalization(abs_coord, do_exist, shower_core):
 
     # Shift shower core
     shower_core[:2] = shower_core[:2] - tile_center[:2]
-
+    stdrec_shower_core[:2] = stdrec_shower_core[:2] - tile_center[:2]
     tile_center = tile_center[np.newaxis, np.newaxis, :]
     rel_coord = np.where(do_exist[:, :, np.newaxis], abs_coord - tile_center, 0)
 
@@ -194,15 +199,19 @@ def tile_normalization(abs_coord, do_exist, shower_core):
     tile_extent = n0 * detector_dist  # extent of tile
     rel_coord[:, :, 0:2] = rel_coord[:, :, 0:2] / tile_extent
     shower_core[:2] = shower_core[:2] / tile_extent
+    stdrec_shower_core[:2] = stdrec_shower_core[:2] / tile_extent
+    stdrec_shower_core_err[:2] = stdrec_shower_core_err[:2] / tile_extent
     # z coordinate normalization
     height_extent = height_scatter
     rel_coord[:, :, 2] = rel_coord[:, :, 2] / height_extent
     shower_core[2] = shower_core[2] / height_extent
 
-    return rel_coord, shower_core
+    return rel_coord, shower_core, stdrec_shower_core, stdrec_shower_core_err
 
 
-def tile_positions(ixy0, tile_size, badsd, shower_core):
+def tile_positions(
+    ixy0, tile_size, badsd, shower_core, stdrec_shower_core, stdrec_shower_core_err
+):
     # Create centered tile
     # n0 = (tile_size - 1) / 2
     x, y = np.mgrid[0:tile_size, 0:tile_size].astype(float)
@@ -224,9 +233,21 @@ def tile_positions(ixy0, tile_size, badsd, shower_core):
     status = np.logical_and(good, do_exist)
 
     abs_coord = tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:] / 1e2
-    rel_coord, rel_shower_core = tile_normalization(abs_coord, do_exist, shower_core)
+    rel_coord, rel_shower_core, rel_stdrec_shower_core, rel_stdrec_shower_core_err = (
+        tile_normalization(
+            abs_coord, do_exist, shower_core, stdrec_shower_core, stdrec_shower_core_err
+        )
+    )
 
-    return rel_coord, status, do_exist, good, rel_shower_core
+    return (
+        rel_coord,
+        status,
+        do_exist,
+        good,
+        rel_shower_core,
+        rel_stdrec_shower_core,
+        rel_stdrec_shower_core_err,
+    )
 
 
 def detector_readings(data, dst_lists, ntile, up_low_traces):
@@ -294,6 +315,9 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
         data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
 
         shower_core = data["shower_core"][ievt]
+        stdrec_shower_core = data["std_recon"]["shower_core"][ievt]
+        stdrec_shower_core_err = data["std_recon"]["shower_core_err"][ievt]
+
         # Return detector coordinates of the tile centered in ixy0
         (
             data["detector_positions"][ievt, :, :],
@@ -301,7 +325,11 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
             data["detector_exists"][ievt, :, :],
             data["detector_good"][ievt, :, :],
             data["shower_core"][ievt][:],
-        ) = tile_positions(ixy0, ntile, badsd, shower_core)
+            data["std_recon"]["shower_core"][ievt][:],
+            data["std_recon"]["shower_core_err"][ievt][:],
+        ) = tile_positions(
+            ixy0, ntile, badsd, shower_core, stdrec_shower_core, stdrec_shower_core_err
+        )
 
         data["arrival_times"][ievt, :, :] = np.where(
             data["detector_states"][ievt, :, :], data["arrival_times"][ievt, :, :], 0
@@ -347,5 +375,4 @@ def parse_dst_file(
     data = fill_metadata(data, dst_file, meta_data)
     data = shower_params(data, dst_lists, xmax_reader, add_standard_recon)
     data = detector_readings(data, dst_lists, ntile, up_low_traces)
-
     return data

@@ -46,6 +46,16 @@ def dst_sections(dst_string):
         elif badsdinfo_readout:
             badsdinfo_list_str.append(line)
 
+    if len(event_list_str) - len(badsdinfo_list_str) == 1:
+        badsdinfo_list_str.append("")
+
+    assert (
+        len(event_list_str)
+        == len(sdmeta_list_str)
+        == len(sdwaveform_list_str)
+        == len(badsdinfo_list_str)
+    ), "lists are of different sizes"
+
     return event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str
 
 
