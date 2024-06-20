@@ -1,5 +1,6 @@
 import json
 import numpy as np
+from collections import defaultdict
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
@@ -50,7 +51,8 @@ def shower_params(data, dst_lists, xmax_data, add_standard_recon):
     data["mass_number"] = corsika_id2mass(event_list[0])
 
     data["energy"] = event_list[1]
-    data["xmax"] = xmax_data(data["energy"])
+    if xmax_data:
+        data["xmax"] = xmax_data(data["energy"])
     data["shower_axis"] = np.array(
         [
             np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
@@ -208,7 +210,6 @@ def tile_normalization(
 
     return rel_coord, shower_core, stdrec_shower_core, stdrec_shower_core_err
 
-
 def tile_positions(
     ixy0, tile_size, badsd, shower_core, stdrec_shower_core, stdrec_shower_core_err
 ):
@@ -248,6 +249,14 @@ def tile_positions(
         rel_stdrec_shower_core,
         rel_stdrec_shower_core_err,
     )
+
+def get_sd_position(xy_code):
+    # Create mask (:, tile_size, tile_size)
+    masks = np.any(tasd_clf.tasdmc_clf[:, 0][:, None] == xy_code, axis=1)
+    tasdmc_clf_indices = np.where(masks)[0]
+    abs_coord = tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:] / 1e2
+    return abs_coord
+
 
 
 def detector_readings(data, dst_lists, ntile, up_low_traces):
@@ -357,6 +366,64 @@ def detector_readings(data, dst_lists, ntile, up_low_traces):
 
     return data
 
+def detector_readings_no_tiling(data, dst_lists):
+    ntime_trace = 128  # number of time trace of waveform
+    to_nsec = 4 * 1000
+
+    num_events = data["mass_number"].shape[0]
+
+    empty_events = []
+
+    sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists[1:4]
+
+    for ievt, (event, wform, badsd) in enumerate(
+        zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
+    ):
+        if event.shape[1] == 0:
+            empty_events.append(ievt)
+            continue
+
+        ####
+        for keys in ["fadc_per_vem_low", "fadc_per_vem_up",
+                     "arrival_times_low", "arrival_times_up",
+                     "signal_isgood", "fadc_low", "fadc_up",
+                     "signal_ixy", "signal_total_low",
+                     "signal_total_up", 
+                     "wf_ixy", "detector_positions", "wf_clock", "wf_max_clock"]:
+            if keys not in data:
+                data[keys] = []
+            if len(data[keys]) <= ievt:
+                data[keys].append([])
+        data["fadc_per_vem_low"][ievt].extend(event[9])
+        data["fadc_per_vem_up"][ievt].extend(event[10])
+        data["signal_ixy"][ievt].extend(event[0])
+        data["signal_isgood"][ievt].extend(event[1])
+        data["arrival_times_low"][ievt].extend(event[2] * to_nsec)
+        data["arrival_times_up"][ievt].extend(event[3] * to_nsec)
+        data["signal_total_low"][ievt].extend(event[4])
+        data["signal_total_up"][ievt].extend(event[5])
+        data["fadc_low"][ievt].extend(wform[3:3+ntime_trace, :].transpose())
+        data["fadc_up"][ievt].extend(wform[3+ntime_trace:, :].transpose())
+        data["wf_ixy"][ievt].extend(wform[0, :])
+        data["wf_clock"][ievt].extend(wform[1, :])
+        data["wf_max_clock"][ievt].extend(wform[2, :])
+        det_positions = get_sd_position(wform[0, :])
+        data["detector_positions"][ievt].extend(det_positions)
+        
+    # Remove empty events
+    if len(empty_events) != 0:
+        for key, value in data.items():
+            if key == "metadata":
+                continue
+
+            if key == "std_recon":
+                for key_std, value_std in value.items():
+                    data[key][key_std] = np.delete(value_std, empty_events, axis=0)
+                continue
+            data[key] = np.delete(value, empty_events, axis=0)
+
+    return data
+
 
 def parse_dst_file(
     dst_file,
@@ -380,4 +447,23 @@ def parse_dst_file(
     data = fill_metadata(data, dst_file, meta_data)
     data = shower_params(data, dst_lists, xmax_reader, add_standard_recon)
     data = detector_readings(data, dst_lists, ntile, up_low_traces)
+    return data
+
+def parse_dst_file_no_tiling(
+    dst_file,
+):
+    #  ntile  # number of SD per one side
+    dst_string = read_dst_file(dst_file, add_standard_recon=True)
+    dst_lists = parse_dst_string(dst_string)
+
+    if dst_lists is None:
+        print("None")
+        return None
+    else:
+        print("OK")
+
+    # Dictionary with parsed data
+    data = dict()
+    data = shower_params(data, dst_lists, xmax_data=False, add_standard_recon=True)
+    data = detector_readings_no_tiling(data, dst_lists)
     return data
