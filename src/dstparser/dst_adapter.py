@@ -366,7 +366,7 @@ def parse_dst_file(
     up_low_traces=False,
     add_standard_recon=False,
 ):
-    #  ntile  # number of SD per one side
+    #  ntile - number of SD per one side
     dst_string = read_dst_file(dst_file, add_standard_recon)
     dst_lists = parse_dst_string(dst_string)
 

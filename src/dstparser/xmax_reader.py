@@ -12,9 +12,14 @@ class XmaxReader:
         file_idx = []
         all_xmax = []
         for dst_file in xmax_files:
-            nfile, nevents, zenith_angle, xmax = np.loadtxt(
-                dst_file, dtype=str, unpack=True
-            )
+            try:
+                nfile, nevents, zenith_angle, xmax = np.loadtxt(
+                    dst_file, dtype=str, unpack=True
+                )
+            except Exception as ex:
+                print(f"file: {dst_file}")
+                print(ex)
+                raise
 
             zenith_angle = np.array(zenith_angle, dtype=np.float32)
             cost = np.cos(zenith_angle * (np.pi / 180))
@@ -59,6 +64,9 @@ class XmaxReader:
 
 
 class XmaxReaderEmpty(XmaxReader):
+    def __init__(self):
+        pass
+
     def read_file(self, file_name):
         self._xmax0 = None
         self._en0 = None

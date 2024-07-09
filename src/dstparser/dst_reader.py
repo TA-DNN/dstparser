@@ -33,4 +33,8 @@ def read_dst_file(dst_filename, add_standard_recon):
     except subprocess.CalledProcessError as e:
         output = e.output
 
+    # If output is empty
+    if len(output) == 0:
+        print(f'dst_reader error:\n"{error}"')
+
     return output.strip().split("\n")
