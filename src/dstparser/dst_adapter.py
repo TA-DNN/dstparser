@@ -30,7 +30,10 @@ def shower_params(data, dst_lists, xmax_data):
     data["mass_number"] = corsika_id2mass(event_list[0])
 
     data["energy"] = event_list[1]
-    data["xmax"] = xmax_data(data["energy"])
+    
+    if xmax_data is not None
+        data["xmax"] = xmax_data(data["energy"])
+    
     data["shower_axis"] = np.array(
         [
             np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
@@ -316,8 +319,8 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
 
 def parse_dst_file(
     dst_file,
-    xmax_reader,
     ntile=7,
+    xmax_reader=None,
     avg_traces=True,
     add_shower_params=True,
     add_standard_recon=True,
@@ -330,7 +333,8 @@ def parse_dst_file(
         return None
 
     # Load xmax info for current dst file
-    xmax_reader.read_file(dst_file)
+    if xmax_reader is not None:
+        xmax_reader.read_file(dst_file)
 
     # Dictionary with parsed data
     data = dict()
