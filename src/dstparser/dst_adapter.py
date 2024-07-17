@@ -189,7 +189,13 @@ def tile_normalization(data, ievt):
     keys = ["shower_core", "std_recon_shower_core", "std_recon_shower_core_err"]
     for key in keys:
         if data.get(key) is not None:
-            data[key][ievt][:2] = (data[key][ievt][:2] - tile_center[:2]) / tile_extent
+            if key == "std_recon_shower_core_err":
+                # no need to shift, because it is an error
+                data[key][ievt][:2] = data[key][ievt][:2] / tile_extent
+            else:
+                data[key][ievt][:2] = (
+                    data[key][ievt][:2] - tile_center[:2]
+                ) / tile_extent
             if key == "shower_core":
                 data[key][ievt][2] = data[key][ievt][2] / height_extent
 

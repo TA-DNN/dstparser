@@ -34,7 +34,21 @@ def get_files_from_directories(directories, patterns):
 def distribute_files(files, num_workers, output_filename_func, output_dir):
     worker_files = defaultdict(lambda: {"input_files": [], "output_file": ""})
     for idx, file in enumerate(files):
-        worker_id = idx % num_workers
+        # worker_id = idx % num_workers
+        worker_id = (idx // 26) % 1000
+        worker_files[worker_id]["input_files"].append(str(file))
+        worker_files[worker_id]["output_file"] = output_filename_func(
+            worker_id, output_dir
+        )
+    return dict(worker_files)
+
+
+def distribute_files11(files, nfinal_files, output_filename_func, output_dir):
+    worker_files = defaultdict(lambda: {"input_files": [], "output_file": ""})
+    files_per_worker = len(files) // nfinal_files + 1
+    for idx, file in enumerate(files):
+        worker_id = idx // files_per_worker
+        # worker_id = (idx // 26) % 1000
         worker_files[worker_id]["input_files"].append(str(file))
         worker_files[worker_id]["output_file"] = output_filename_func(
             worker_id, output_dir
@@ -58,11 +72,11 @@ def main(directories, patterns, num_workers, output_filename_func, output_dir):
 
 
 def generate_output_filename(worker_index, output_dir):
-    return str(output_dir / f"temp_{worker_index}_output.h5").strip()
+    return str(output_dir / f"temp_{worker_index:05}.h5").strip()
 
 
 def generate_output_filename1(worker_index, output_dir):
-    return str(output_dir / f"final_{worker_index}_output.h5").strip()
+    return str(output_dir / f"pfe50full2l_{worker_index:03}.h5").strip()
 
 
 def run_dstparser_job(max_jobs, db_file, task_name, log_dir):
@@ -87,7 +101,7 @@ def generate_db(
 ):
 
     output_dir = Path(output_dir)
-    db_files = [output_dir / "jobs_01_db.json", output_dir / "jobs_02_db.json"]
+    db_files = [output_dir / "jobs_pass1.json", output_dir / "jobs_pass2.json"]
 
     data_base = []
     for db_file in db_files:
@@ -112,7 +126,7 @@ def generate_db(
     for key in data_base[0]:
         h5_files.append(data_base[0][key]["output_file"])
 
-    data_base[1] = distribute_files(
+    data_base[1] = distribute_files11(
         h5_files,
         num_final_h5_files,
         generate_output_filename1,

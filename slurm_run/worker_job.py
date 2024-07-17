@@ -161,7 +161,7 @@ def task_info(zero_indexing=False):
     return task_id, ntasks
 
 
-def save2hdf5(acc_data, filename, np_dtype=np.float16):
+def save2hdf5(acc_data, filename, np_dtype=np.float32):
     compress_arrs = ["time", "arrival", "detector"]
     with h5py.File(filename, "w") as f:
         for key, value in acc_data.items():
@@ -173,7 +173,7 @@ def save2hdf5(acc_data, filename, np_dtype=np.float16):
                 value = value.astype(np_dtype)
 
             if any(key.startswith(s) for s in compress_arrs):
-                value = compress_sparse_array(value)
+                value = compress_sparse_array(value, np_dtype)
 
             # Write to hdf5 file:
             if isinstance(value, dict):
@@ -330,7 +330,7 @@ def dst_to_hdf5():
             continue
 
         data = info_from_filename(data, file)
-        data = filter_data_max(data, max_events=50)
+        data = filter_full_tiles(data, max_events=50)
 
         for key, value in data.items():
             acc_data.setdefault(key, []).append(value)
