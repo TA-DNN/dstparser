@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 from collections import defaultdict
 from run_dst_conversion import run_slurm_job, slurm_directives
+import re
 
 
 def normalize_input(input_value):
@@ -61,6 +62,7 @@ def main(directories, patterns, num_workers, output_filename_func, output_dir):
     directories = normalize_input(directories)
     patterns = normalize_input(patterns)
     files = get_files_from_directories(directories, patterns)
+    # files = filter_files_by_date(files)
     print(f"Found {len(files)} files")
     distributed_files = distribute_files(
         files, num_workers, output_filename_func, output_dir
@@ -71,12 +73,22 @@ def main(directories, patterns, num_workers, output_filename_func, output_dir):
     return distributed_files
 
 
+def filter_files_by_date(files):
+    # Filter data files to take only before 16/06/03
+    filtered_files = list()
+    for file in files:
+        file_date = int(re.split(r"[_,.\s]", Path(file).parts[-1])[2])
+        if file_date <= 160603:
+            filtered_files.append(file)
+    return sorted(filtered_files)
+
+
 def generate_output_filename(worker_index, output_dir):
     return str(output_dir / f"temp_{worker_index:05}.h5").strip()
 
 
 def generate_output_filename1(worker_index, output_dir):
-    return str(output_dir / f"pfe50full2l_{worker_index:03}.h5").strip()
+    return str(output_dir / f"ta_data_{worker_index:03}.h5").strip()
 
 
 def run_dstparser_job(max_jobs, db_file, task_name, log_dir):
@@ -86,10 +98,19 @@ def run_dstparser_job(max_jobs, db_file, task_name, log_dir):
     slurm_settings["mem"] = "5gb"
 
     script = Path(__file__).parent / "worker_job.py"
+    # for task_id in range(max_jobs):
+    # fout = f"/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/07/07_ta_data/file_{task_id}.out"
     options = f"{str(db_file).strip()} {task_name}"
     log_dir = Path(log_dir)
     print(f"Options = {options}")
-    run_slurm_job(slurm_settings, log_dir, script, options, suffix="_worker_job")
+    run_slurm_job(
+        slurm_settings,
+        log_dir,
+        script,
+        options,
+        suffix="_worker_job",
+        # batch_command="bash",
+    )
 
 
 def generate_db(
@@ -109,8 +130,9 @@ def generate_db(
             with open(db_file, "r") as f:
                 data_base.append(json.load(f))
 
+    print(f"Here is ok, {db_files}")
     if len(data_base) == 2:
-        return data_base, db_file
+        return data_base, db_files
 
     data_base = [None, None]
 
@@ -144,18 +166,19 @@ def main_job(data_base, db_files, log_dir):
 
     ready = True
     for task_id, task in data_base[0].items():
-        for ifile in task["output_file"]:
-            # print(ifile)
-            if not Path(ifile).exists():
-                # print(f"{ifile} not exists")
-                ready = False
-                break
+        # print("OUTPUT FILES FROM DB", task["output_file"])
+        if not Path(task["output_file"]).exists():
+            print(f'{task["output_file"]} not exists')
+            ready = False
+            break
         if not ready:
             break
 
-    # print(f"READY {ready}")
+    print(f"READY {ready}")
     if not ready:
         print("Temp files are not ready!")
+        print(db_files)
+        print(db_files[0])
         run_dstparser_job(
             len(data_base[0]), db_files[0], task_name="parse_dst", log_dir=log_dir
         )
@@ -187,6 +210,7 @@ def main_job(data_base, db_files, log_dir):
             fname = str(Path(task["output_file"])).strip()
             info_str += f"\n{task_id} {fname} ready {ready_tasks[task_id]}"
 
+        print(f"READY = {ready}")
         if ready:
             break
         info_str += f"\nAfter {i*check_every}/{max_time_to_wait} sec ({i*check_every/max_time_to_wait*100:.1f}%)\nReady num = {ready_num}/{len(ready_tasks)}"

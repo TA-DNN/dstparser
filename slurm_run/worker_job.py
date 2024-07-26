@@ -163,26 +163,35 @@ def task_info(zero_indexing=False):
 
 def save2hdf5(acc_data, filename, np_dtype=np.float32):
     compress_arrs = ["time", "arrival", "detector"]
-    with h5py.File(filename, "w") as f:
-        for key, value in acc_data.items():
-            value = np.concatenate(value, axis=0)
 
-            if isinstance(value, np.ndarray) and np.issubdtype(
-                value.dtype, np.floating
-            ):
-                value = value.astype(np_dtype)
+    nattempts = 5
+    for iattempt in range(nattempts):
+        with h5py.File(filename, "w") as f:
+            for key, value in acc_data.items():
+                value = np.concatenate(value, axis=0)
 
-            if any(key.startswith(s) for s in compress_arrs):
-                value = compress_sparse_array(value, np_dtype)
+                if isinstance(value, np.ndarray) and np.issubdtype(
+                    value.dtype, np.floating
+                ):
+                    value = value.astype(np_dtype)
 
-            # Write to hdf5 file:
-            if isinstance(value, dict):
-                for key1, value1 in value.items():
-                    f.create_dataset(f"{key}/{key1}", data=value1)
-            else:
-                f.create_dataset(f"{key}", data=value)
+                if any(key.startswith(s) for s in compress_arrs):
+                    value = compress_sparse_array(value, np_dtype)
 
-            del value
+                # Write to hdf5 file:
+                if isinstance(value, dict):
+                    for key1, value1 in value.items():
+                        f.create_dataset(f"{key}/{key1}", data=value1)
+                else:
+                    f.create_dataset(f"{key}", data=value)
+
+                del value
+
+        try:
+            read_data = read_h5(filename)
+            break
+        except Exception as ex:
+            print(f"Attempt {iattempt + 1} failed with: {ex}")
 
 
 def join_hdf5():
@@ -190,6 +199,7 @@ def join_hdf5():
     task_id, ntasks = task_info()
     if task_id is None:
         raise ValueError("No slurm is found!")
+        # task_id = sys.argv[3]
 
     with open(sys.argv[1], "r") as f:
         task_db = json.load(f)
@@ -283,11 +293,12 @@ def filter_full_tiles(data, max_events=None, invert2partial=False):
 
 
 def dst_to_hdf5():
-    # def dst_to_hdf5(input_files, output_file):
 
     task_id, ntasks = task_info()
     if task_id is None:
         raise ValueError("No slurm is found!")
+        # task_id = sys.argv[3]
+
     with open(sys.argv[1], "r") as f:
         task_db = json.load(f)
 
@@ -303,8 +314,9 @@ def dst_to_hdf5():
 
     acc_data = dict()
     ifiles = task_db[task_id]["input_files"]
-    xmax_dir = Path(ifiles[0]).parent
-    xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
+    # xmax_dir = Path(ifiles[0]).parent
+    # xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
+    xmax_reader = None
     for file in tqdm(ifiles, total=len(ifiles), desc="DST conversion"):
 
         if xmax_reader is not None:
@@ -322,7 +334,7 @@ def dst_to_hdf5():
             ntile=7,
             xmax_reader=xmax_reader,
             avg_traces=False,
-            add_shower_params=True,
+            add_shower_params=False,
             add_standard_recon=True,
         )
 
@@ -330,7 +342,7 @@ def dst_to_hdf5():
             continue
 
         data = info_from_filename(data, file)
-        data = filter_full_tiles(data, max_events=50)
+        # data = filter_full_tiles(data, max_events=50)
 
         for key, value in data.items():
             acc_data.setdefault(key, []).append(value)

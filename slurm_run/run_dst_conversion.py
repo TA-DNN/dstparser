@@ -8,11 +8,11 @@ def slurm_directives():
         "job-name": "procsh",
         "array": "0",
         "ntasks": 1,
-        # "exclude": "hpa-wn[06,09,12]",
-        "mem": "3gb",
+        # "exclude": "hpa-wn[11,13]",
+        "mem": "20gb",
         "cpus-per-task": 1,
-        "partition": "edr1_short",
-        "time": "02:00:00",
+        "partition": "short_serial",
+        "time": "01:00:00",
     }
 
 
@@ -36,7 +36,13 @@ def copy_files(src_paths, dest_dir):
 
 
 def run_slurm_job(
-    slurm_directives, log_dir, script, options="", app="python", suffix=""
+    slurm_directives,
+    log_dir,
+    script,
+    options="",
+    app="python",
+    suffix="",
+    batch_command="sbatch",
 ):
     # Create log dirs
     log_dir = Path(log_dir)
@@ -65,7 +71,7 @@ def run_slurm_job(
 
     # Run slurm script
     proc = subprocess.run(
-        ["sbatch", f"{slurm_file}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        [batch_command, f"{slurm_file}"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
 
     print(proc.stdout.decode())
@@ -77,19 +83,23 @@ def run_slurm_job(
 def run_main_job():
 
     output_dir = (
-        "/ceph/work/SATORI/projects"
-        "/TA-ASIoP/dnn_training_data/2024/07/05_pfe50full_2layers/"
+        "/ceph/work/SATORI/projects" "/TA-ASIoP/dnn_training_data/2024/07/10_ta_wdate/"
     )
 
+    # data_dirs = [
+    #     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
+    #     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+    # ]
+
     data_dirs = [
-        "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
-        "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+        "/ceph/work/SATORI/projects/TA-ASIoP/tasdobs_dstbank/rufldf",
     ]
+
     data_dirs = " ".join(data_dirs)
-    # patterns = ["tasdcalibev*rufldf.dst.gz"]
-    patterns = "DAT*dst.gz"
-    num_temp_files = 1000
-    num_final_files = 26
+    patterns = "tasdcalibev*rufldf.dst.gz"
+    # patterns = "DAT*dst.gz"
+    num_temp_files = 100
+    num_final_files = 25
 
     script = Path(__file__).parent / "main_job.py"
     log_dir = Path(output_dir) / "slurm_run"
@@ -101,7 +111,14 @@ def run_main_job():
     options += f"--final_h5_files {num_final_files} "
 
     # print(options)
-    run_slurm_job(slurm_directives(), log_dir, script, options, suffix="_main_job")
+    run_slurm_job(
+        slurm_directives(),
+        log_dir,
+        script,
+        options,
+        suffix="_main_job",
+        batch_command="bash",
+    )
 
 
 if __name__ == "__main__":

@@ -28,7 +28,6 @@ def shower_params(data, dst_lists, xmax_data):
     to_meters = 1e-2
     event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])
-
     data["energy"] = event_list[1]
 
     if xmax_data is not None:
@@ -51,6 +50,21 @@ def shower_params(data, dst_lists, xmax_data):
 
 def standard_recon(data, dst_lists):
     event_list = dst_lists[0]
+    # Exempt from comments of cpp source code at:
+    # /ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
+    # // Reported by DAQ as time of the 1st signal in the triple that caused the triggger.
+    # // From now on, everyhting is relative to hhmmss.  Not useful in the event reconstruction.
+    # Date of event
+    # rusdraw_.yymmdd = 80916; // Event date year = 08, month = 09, day = 16
+    data["std_recon_yymmdd"] = event_list[7]
+    # Time of event
+    # rusdraw_.hhmmss = 1354;  // Event time, hour=00, minute=13, second = 54
+    data["std_recon_hhmmss"] = event_list[8]
+    # Microseconds for the second
+    # rusdraw_.usec = 111111
+    data["std_recon_usec"] = event_list[11]
+    # Number of waveforms for event for all detectors (not very useful so far)
+    # data["std_recon_nofwf"] = event_list[10]
     # number of SDs in space-time cluster
     data["std_recon_nsd"] = event_list[9]
     # energy reconstructed by the standard energy estimation table [EeV]
@@ -228,6 +242,14 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt):
     data["detector_positions"][ievt, :, :, :] = (
         tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
     ) * to_meters
+
+    data["detector_positions_abs"][ievt, :, :, :] = (
+        tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
+    ) * to_meters
+    data["detector_positions_id"][ievt, :, :] = tasd_clf.tasdmc_clf[
+        tasdmc_clf_indices, 0
+    ]
+
     data["detector_states"][ievt, :, :] = status
     data["detector_exists"][ievt, :, :] = do_exist
     data["detector_good"][ievt, :, :] = good
@@ -241,6 +263,8 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
     num_events = dst_lists[0][0].shape[0]
     shape = num_events, ntile, ntile
     data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
+    data["detector_positions_abs"] = np.zeros((*shape, 3), dtype=np.float32)
+    data["detector_positions_id"] = np.zeros(shape, dtype=np.float32)
     data["detector_states"] = np.zeros(shape, dtype=bool)
     data["detector_exists"] = np.zeros(shape, dtype=bool)
     data["detector_good"] = np.zeros(shape, dtype=bool)
