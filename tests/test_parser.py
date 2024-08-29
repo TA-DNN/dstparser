@@ -34,5 +34,5 @@ def test_parser(dst_file):
 
 
 if __name__ == "__main__":
-    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdobs_dstbank/rufldf/tasdcalibev_pass2_080511.bsdinfo.rufldf.dst.gz"
+    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT000007_gea.rufldf.dst.gz"
     test_parser(dst_file)

@@ -46,7 +46,7 @@ def distribute_files(files, num_workers, output_filename_func, output_dir):
 
 def distribute_files11(files, nfinal_files, output_filename_func, output_dir):
     worker_files = defaultdict(lambda: {"input_files": [], "output_file": ""})
-    files_per_worker = len(files) // nfinal_files + 1
+    files_per_worker = len(files) // nfinal_files
     for idx, file in enumerate(files):
         worker_id = idx // files_per_worker
         # worker_id = (idx // 26) % 1000
@@ -88,14 +88,14 @@ def generate_output_filename(worker_index, output_dir):
 
 
 def generate_output_filename1(worker_index, output_dir):
-    return str(output_dir / f"ta_data_{worker_index:03}.h5").strip()
+    return str(output_dir / f"pfe_mc_{worker_index:03}.h5").strip()
 
 
 def run_dstparser_job(max_jobs, db_file, task_name, log_dir):
 
     slurm_settings = slurm_directives()
     slurm_settings["array"] = f"0-{max_jobs - 1}"
-    slurm_settings["mem"] = "5gb"
+    # slurm_settings["mem"] = "5gb"
 
     script = Path(__file__).parent / "worker_job.py"
     # for task_id in range(max_jobs):

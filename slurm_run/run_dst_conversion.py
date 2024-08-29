@@ -83,23 +83,24 @@ def run_slurm_job(
 def run_main_job():
 
     output_dir = (
-        "/ceph/work/SATORI/projects" "/TA-ASIoP/dnn_training_data/2024/07/10_ta_wdate/"
+        "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/08/01_mc_wdate/"
     )
 
-    # data_dirs = [
-    #     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
-    #     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
-    # ]
-
     data_dirs = [
-        "/ceph/work/SATORI/projects/TA-ASIoP/tasdobs_dstbank/rufldf",
+        # "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
+        # "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+        "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04helium/080417_160603/Em1_bsdinfo",
     ]
 
+    # data_dirs = [
+    #     "/ceph/work/SATORI/projects/TA-ASIoP/tasdobs_dstbank/rufldf",
+    # ]
+
     data_dirs = " ".join(data_dirs)
-    patterns = "tasdcalibev*rufldf.dst.gz"
-    # patterns = "DAT*dst.gz"
-    num_temp_files = 100
-    num_final_files = 25
+    # patterns = "tasdcalibev*rufldf.dst.gz"
+    patterns = "DAT*dst.gz"
+    num_temp_files = 1000
+    num_final_files = 50
 
     script = Path(__file__).parent / "main_job.py"
     log_dir = Path(output_dir) / "slurm_run"

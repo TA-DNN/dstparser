@@ -341,7 +341,13 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
                 )
 
     # Remove empty events
+    print(f"Total events in the file = {len(sdmeta_list)}")
+    print(f"Empty events = {len(empty_events)}")
+    print(f"Empty/total = {len(empty_events)/len(sdmeta_list)}")
     if len(empty_events) != 0:
+        # print(f"Total events in the file = {len(sdmeta_list)}")
+        # print(f"Empty events = {len(empty_events)}")
+        # print(f"Empty/total = {len(empty_events)/len(sdmeta_list)}")
         for key, value in data.items():
             data[key] = np.delete(value, empty_events, axis=0)
     return data

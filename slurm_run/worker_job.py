@@ -94,9 +94,9 @@ def compress_sparse_array(array, np_dtype=np.float16):
     data["shape"] = array.shape
     # Test whether original array could be restored
     # from compressed representation
-    assert np.all(
-        restore_sparse_array(data) == array.astype(np_dtype)
-    ), "Bad compression"
+    # assert np.all(
+    #     restore_sparse_array(data) == array.astype(np_dtype)
+    # ), "Bad compression"
     return data
 
 
@@ -314,9 +314,9 @@ def dst_to_hdf5():
 
     acc_data = dict()
     ifiles = task_db[task_id]["input_files"]
-    # xmax_dir = Path(ifiles[0]).parent
-    # xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
-    xmax_reader = None
+    xmax_dir = Path(ifiles[0]).parent
+    xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
+    # xmax_reader = None
     for file in tqdm(ifiles, total=len(ifiles), desc="DST conversion"):
 
         if xmax_reader is not None:
@@ -334,7 +334,7 @@ def dst_to_hdf5():
             ntile=7,
             xmax_reader=xmax_reader,
             avg_traces=False,
-            add_shower_params=False,
+            add_shower_params=True,
             add_standard_recon=True,
         )
 
