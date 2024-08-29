@@ -1,17 +1,54 @@
-.. DSTParser documentation master file, created by
-   sphinx-quickstart on Thu Aug 29 13:32:34 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-DSTParser documentation
-=======================
-
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+DstParser Documentation
+========================
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+
+Introduction
+------------
+
+DstParser is a tool designed to parse and process DST (Data Summary Tape) files, commonly used in cosmic ray experiments.
+This documentation provides an overview of the installation, usage, and API of DstParser.
+
+.. note::
+   This project is under active development. Contributions are welcome!
+
+Installation
+------------
+
+To install DstParser, use the following command:
+
+.. code-block:: bash
+
+   pip install dstparser
+
+Usage
+-----
+
+Here is an example of how to use DstParser:
+
+.. code-block:: python
+
+   from dstparser import DstParser
+
+   parser = DstParser("path/to/dstfile.dst")
+   data = parser.parse()
+   print(data)
+
+API Reference
+-------------
+
+The API reference can be found below:
+
+.. automodule:: dstparser
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+License
+-------
+
+DstParser is released under the MIT License.
+
 
