@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0  # Fetch all history for .GitInfo and .Lastmod
 
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -28,7 +30,9 @@ jobs:
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        personal_token: ${{ secrets.DOCS_DEPLOYMENT_TOKEN }}  # Use the organization PAT
         publish_dir: ./docs/build/html
-        publish_branch: gh-pages  # Deploy to the gh-pages branch
-        force_orphan: true  # Make sure the gh-pages branch only contains the latest version
+        publish_branch: gh-pages
+        force_orphan: true
+        user_name: 'github-actions[bot]'
+        user_email: 'github-actions[bot]@users.noreply.github.com'
