@@ -38,4 +38,4 @@ def test_parser(dst_file, print_read_data=False):
 
 if __name__ == "__main__":
     dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT000007_gea.rufldf.dst.gz"
-    test_parser(dst_file, print_read_data=False)
+    test_parser(dst_file, print_read_data=True)
