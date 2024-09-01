@@ -1,3 +1,38 @@
+[project]
+name = "dstparser"
+version = "0.1.0"
+description = "Parse TA DST files and convert to h5 files for DNN"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE.txt" }
+authors = [
+    { name = "Kozo Fujisue" },
+    { name = "Anton Prosekin", email = "ayprosekin@gmail.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent"
+]
+urls = { "Homepage" = "https://github.com/TA-DNN/dstparser" }
+
+dependencies = [
+    "numpy",
+    "h5py",
+    "tqdm",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+docs = [
+    "sphinx",
+]
+
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+include-package-data = true
+package-dir = { "" = "src" }
