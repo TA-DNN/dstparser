@@ -46,11 +46,34 @@ def dst_sections(dst_string):
         elif badsdinfo_readout:
             badsdinfo_list_str.append(line)
 
+    if len(event_list_str) - len(badsdinfo_list_str) == 1:
+        badsdinfo_list_str.append("")
+
+    assert (
+        len(event_list_str)
+        == len(sdmeta_list_str)
+        == len(sdwaveform_list_str)
+        == len(badsdinfo_list_str)
+    ), "lists are of different sizes"
+
     return event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str
 
 
 def parse_event(event_list_str):
     """
+    # In source code:
+    # 0 rusdmc_.parttype,
+    # 1 rusdmc_.energy,
+    # 2 rusdmc_.theta,
+    # 3 rusdmc_.phi,
+    # 4 rusdmc_.corexyz[0],
+    # 5 rusdmc_.corexyz[1],
+    # 6 rusdmc_.corexyz[2],
+    # 7 rusdraw_.yymmdd,
+    # 8 rusdraw_.hhmmss,
+    # 9 rufptn_.nstclust,
+    # 10 rusdraw_.nofwf,
+    # 11 rusdraw_.usec
     event_format = ["mass_number",
                     "rusdmc_energy",
                     "rusdmc_theta",
