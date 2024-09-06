@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 from collections import defaultdict
 from dstparser.cli.slurm import run_slurm_job
+from dstparser.cli.cli import parse_config
 import re
 
 
@@ -91,9 +92,8 @@ def generate_output_filename1(worker_index, output_dir):
     return str(output_dir / f"pfe_mc_{worker_index:03}.h5").strip()
 
 
-def run_dstparser_job(max_jobs, db_file, task_name, log_dir):
-
-    slurm_settings = slurm_directives()
+def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
+    slurm_settings = config.slurm_settings
     slurm_settings["array"] = f"0-{max_jobs - 1}"
     # slurm_settings["mem"] = "5gb"
 
@@ -162,7 +162,10 @@ def generate_db(
     return data_base, db_files
 
 
-def main_job(data_base, db_files, log_dir):
+def main_job(data_base, db_files, log_dir, configfile):
+
+    config = parse_config(configfile)
+
     ready = True
     for task_id, task in data_base[0].items():
         # print("OUTPUT FILES FROM DB", task["output_file"])
@@ -179,7 +182,11 @@ def main_job(data_base, db_files, log_dir):
         print(db_files)
         print(db_files[0])
         run_dstparser_job(
-            len(data_base[0]), db_files[0], task_name="parse_dst", log_dir=log_dir
+            len(data_base[0]),
+            db_files[0],
+            task_name="parse_dst",
+            log_dir=log_dir,
+            config=config,
         )
 
     ready_tasks = dict()
@@ -223,7 +230,11 @@ def main_job(data_base, db_files, log_dir):
         return
 
     run_dstparser_job(
-        len(data_base[1]), db_files[1], task_name="join_hdf5", log_dir=log_dir
+        len(data_base[1]),
+        db_files[1],
+        task_name="join_hdf5",
+        log_dir=log_dir,
+        config=config,
     )
 
 
@@ -232,6 +243,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Convert DST files to HDF5 format for DNN."
     )
+
+    parser.add_argument(
+        "-c", "--configfile", type=str, help="Configuration file in python syntax"
+    )
+
     parser.add_argument(
         "-l", "--log_dir", type=str, required=True, help="Directory for slurm output"
     )
@@ -283,4 +299,4 @@ if __name__ == "__main__":
         args.temp_h5_files,
         args.final_h5_files,
     )
-    main_job(data_base, db_files, log_dir=args.log_dir)
+    main_job(data_base, db_files, log_dir=args.log_dir, configfile=args.configfile)

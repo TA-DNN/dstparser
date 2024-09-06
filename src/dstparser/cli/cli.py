@@ -24,6 +24,7 @@ def run_main_job(config):
     options += f"--output_dir {config.output_dir} "
     options += f"--temp_h5_files {num_temp_files} "
     options += f"--final_h5_files {config.num_final_files} "
+    options += f"--configfile {config.__file__}"
 
     print(options)
 
