@@ -36,3 +36,6 @@ build-backend = "setuptools.build_meta"
 packages = { find = { where = ["src"] } }
 include-package-data = true
 package-dir = { "" = "src" }
+
+[project.scripts]
+dstparser = "dstparser.cli.cli:main"

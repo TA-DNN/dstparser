@@ -1,3 +1,7 @@
+import numpy as np
+import h5py
+
+
 def minimal_uint_type(array):
     """Save integer array using minimal np.uint type capable
     to hold its max values"""
@@ -37,7 +41,7 @@ def restore_sparse_array(data):
     return array
 
 
-def compress_sparse_array(array, np_dtype=np.float16):
+def compress_sparse_array(array, np_dtype=np.float16, test_compression=False):
     """Compress sparse numpy array with a lot of zeros.
     Returns compressed representation if possible to reduce the size,
     otherwise returns original array
@@ -82,7 +86,67 @@ def compress_sparse_array(array, np_dtype=np.float16):
     data["shape"] = array.shape
     # Test whether original array could be restored
     # from compressed representation
-    # assert np.all(
-    #     restore_sparse_array(data) == array.astype(np_dtype)
-    # ), "Bad compression"
+    # requires additional RAM
+    if test_compression:
+        assert np.all(
+            restore_sparse_array(data) == array.astype(np_dtype)
+        ), "Bad compression"
     return data
+
+
+def write_h5(filename, data):
+    with h5py.File(filename, "w") as f:
+        for key, value in data.items():
+            if isinstance(value, dict):
+                for key1, value1 in value.items():
+                    f.create_dataset(f"{key}/{key1}", data=value1)
+            else:
+                f.create_dataset(f"{key}", data=value)
+
+
+def read_h5(filename):
+    data = dict()
+    with h5py.File(filename, "r") as f:
+        for key, value in f.items():
+            if isinstance(value, h5py.Group):
+                data[key] = dict()
+                for key1, value1 in value.items():
+                    data[key][key1] = value1[:]
+                data[key] = restore_sparse_array(data[key])
+            else:
+                data[key] = value[:]
+
+    return data
+
+
+def save2hdf5(acc_data, filename, np_dtype=np.float32):
+    compress_arrs = ["time", "arrival", "detector"]
+
+    nattempts = 5
+    for iattempt in range(nattempts):
+        with h5py.File(filename, "w") as f:
+            for key, value in acc_data.items():
+                value = np.concatenate(value, axis=0)
+
+                if isinstance(value, np.ndarray) and np.issubdtype(
+                    value.dtype, np.floating
+                ):
+                    value = value.astype(np_dtype)
+
+                if any(key.startswith(s) for s in compress_arrs):
+                    value = compress_sparse_array(value, np_dtype)
+
+                # Write to hdf5 file:
+                if isinstance(value, dict):
+                    for key1, value1 in value.items():
+                        f.create_dataset(f"{key}/{key1}", data=value1)
+                else:
+                    f.create_dataset(f"{key}", data=value)
+
+                del value
+
+        try:
+            read_data = read_h5(filename)
+            break
+        except Exception as ex:
+            print(f"Attempt {iattempt + 1} failed with: {ex}")

@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 from collections import defaultdict
-from run_dst_conversion import run_slurm_job, slurm_directives
+from dstparser.cli.slurm import run_slurm_job
 import re
 
 
@@ -163,7 +163,6 @@ def generate_db(
 
 
 def main_job(data_base, db_files, log_dir):
-
     ready = True
     for task_id, task in data_base[0].items():
         # print("OUTPUT FILES FROM DB", task["output_file"])
