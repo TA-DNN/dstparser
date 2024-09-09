@@ -100,7 +100,7 @@ slurm_settings = {
 # ]
 
 data_dirs = [
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo",
+    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
 ]
 
 # Glob patterns to match DST files to be processed
@@ -151,9 +151,9 @@ njobs_final_pass = 50
 
 # Prefix for the final file names
 # Example: if file_name_pattern = "prot", output files will be "prot_01.h5", "prot_02.h5", etc.
-file_name_pattern = "ni_full"
+file_name_pattern = "final"
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/01_nitrogen_qgsii04/"
+    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/04_iron_qgsii04/"
 )
