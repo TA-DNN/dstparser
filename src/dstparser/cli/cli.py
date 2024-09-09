@@ -19,22 +19,23 @@ def run_main_job(config):
     script = Path(__file__).parent / "main_job.py"
     log_dir = Path(config.output_dir) / "slurm_run"
     options = f"--log_dir {str(log_dir)} "
-    options += f"--data_dirs {data_dirs} "
-    options += f'--glob_patterns "{config.glob_patterns}" '
-    options += f"--output_dir {config.output_dir} "
-    options += f"--temp_h5_files {num_temp_files} "
-    options += f"--final_h5_files {config.num_final_files} "
+    # options += f"--data_dirs {data_dirs} "
+    # options += f'--glob_patterns "{config.glob_patterns}" '
+    # options += f"--output_dir {config.output_dir} "
+    # options += f"--temp_h5_files {num_temp_files} "
+    # options += f"--final_h5_files {config.num_final_files} "
     options += f"--configfile {config.__file__}"
 
     print(options)
 
+    print("OKKK")
     run_slurm_job(
         config.slurm_settings,
         log_dir,
         script,
         options,
         suffix="_main_job",
-        batch_command="bash",
+        # batch_command="bash",
     )
 
 

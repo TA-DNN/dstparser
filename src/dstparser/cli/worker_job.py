@@ -5,70 +5,45 @@ from tqdm.auto import tqdm
 from pathlib import Path
 from dstparser import parse_dst_file
 from dstparser.xmax_reader import XmaxReader
-from .io import read_h5, save2hdf5
-from .job_runner import task_info
-from .data_filters import filter_full_tiles
+from dstparser.cli.io import read_h5, save2hdf5
+from dstparser.cli.slurm import task_info
+from dstparser.cli.data_filters import filter_full_tiles
 
 
-def join_hdf5():
-
-    task_id, ntasks = task_info()
-    if task_id is None:
-        raise ValueError("No slurm is found!")
-        # task_id = sys.argv[3]
-
-    with open(sys.argv[1], "r") as f:
-        task_db = json.load(f)
-
-    task_id = str(task_id)
-    filename = task_db[task_id]["output_file"]
-
-    print(f"Joining files for {filename}")
-
-    filename = Path(filename)
-    if filename.exists():
-        print(f"{filename} is already exists!")
-        return
-    else:
-        filename.parent.mkdir(parents=True, exist_ok=True)
-
-    acc_data = dict()
-    ifiles = task_db[task_id]["input_files"]
-
-    for ifile in tqdm(ifiles, total=len(ifiles), desc=f"Joining files for {filename}"):
-        data = read_h5(ifile)
-        for key, value in data.items():
-            acc_data.setdefault(key, []).append(value)
-
-    save2hdf5(acc_data, filename)
-
-
-def dst_to_hdf5():
+def process_files(task_function):
 
     task_id, ntasks = task_info()
     if task_id is None:
         raise ValueError("No slurm is found!")
-        # task_id = sys.argv[3]
 
     with open(sys.argv[1], "r") as f:
         task_db = json.load(f)
 
-    task_id = str(task_id)
-    filename = task_db[task_id]["output_file"]
+    task = task_db[str(task_id)]
+    ofile_ids = []
+    for ofile_id in task:
+        ofile = Path(task[ofile_id]["output_file"])
+        if not ofile.exists():
+            ofile_ids.append(ofile_id)
+        else:
+            print(f"Exist: {ofile}")
 
-    filename = Path(filename)
-    print(f"Create file {str(filename)}")
-    if filename.exists():
-        return
-    else:
-        filename.parent.mkdir(parents=True, exist_ok=True)
+    for ofile_id in ofile_ids:
+        ifiles = task[ofile_id]["input_files"]
+        ofile = task[ofile_id]["output_file"]
+        Path(ofile).parent.mkdir(parents=True, exist_ok=True)
+        task_function(ifiles, ofile)
+
+
+def dst_to_hdf5(ifiles, ofile):
 
     acc_data = dict()
-    ifiles = task_db[task_id]["input_files"]
     xmax_dir = Path(ifiles[0]).parent
     xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
     # xmax_reader = None
-    for file in tqdm(ifiles, total=len(ifiles), desc="DST conversion"):
+    for file in tqdm(
+        ifiles, total=len(ifiles), desc=f"DST conversion for {Path(ofile).name}"
+    ):
 
         if xmax_reader is not None:
             # xmax_dir is the same as directory of the file
@@ -90,22 +65,36 @@ def dst_to_hdf5():
         )
 
         if data is None:
+            print(f"Data is empty for {file}")
             continue
 
+        # Filter data
         data = filter_full_tiles(data, max_events=50)
 
+        # Distribute by fields
         for key, value in data.items():
             acc_data.setdefault(key, []).append(value)
 
-    save2hdf5(acc_data, filename)
+    save2hdf5(acc_data, ofile)
+
+
+def join_hdf5(ifiles, ofile):
+    acc_data = dict()
+    for ifile in tqdm(ifiles, total=len(ifiles), desc=f"Joining files for {ofile}"):
+        data = read_h5(ifile)
+        # Distribute by fields
+        for key, value in data.items():
+            acc_data.setdefault(key, []).append(value)
+
+    save2hdf5(acc_data, ofile)
 
 
 def worker_job():
 
     if sys.argv[2] == "parse_dst":
-        dst_to_hdf5()
+        process_files(dst_to_hdf5)
     elif sys.argv[2] == "join_hdf5":
-        join_hdf5()
+        process_files(join_hdf5)
 
 
 if __name__ == "__main__":

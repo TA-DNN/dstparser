@@ -10,68 +10,54 @@ from dstparser.cli.cli import parse_config
 import re
 
 
-def normalize_input(input_value):
-    if isinstance(input_value, list):
-        return input_value
-    elif isinstance(input_value, str) and "," in input_value:
-        return [item.strip() for item in input_value.split(",")]
-    elif isinstance(input_value, str):
-        return [input_value]
-    else:
-        raise ValueError("Input must be a list or a string.")
+def find_files(dirs, globs):
 
+    def convert_to_list(value):
+        if isinstance(value, list):
+            return value
+        elif isinstance(value, str) and "," in value:
+            return [item.strip() for item in value.split(",")]
+        elif isinstance(value, str):
+            return [value]
+        else:
+            raise ValueError("Input must be a list or a string.")
 
-def get_files_from_directories(directories, patterns):
-    all_files = []
-    for directory in directories:
-        path = Path(directory).resolve()
+    dirs = convert_to_list(dirs)
+    globs = convert_to_list(globs)
+
+    files = []
+    for d in dirs:
+        path = Path(d).resolve()
         if not path.exists():
             raise ValueError(f'"{path}" doesn\'t exist!')
-        for pattern in patterns:
-            matched_files = path.rglob(pattern)
-            all_files.extend(matched_files)
-    return sorted(all_files)
+        for glob in globs:
+            matched_files = path.rglob(glob)
+            files.extend(matched_files)
+    return files
 
 
-def distribute_files(files, num_workers, output_filename_func, output_dir):
-    worker_files = defaultdict(lambda: {"input_files": [], "output_file": ""})
-    for idx, file in enumerate(files):
-        # worker_id = idx % num_workers
-        worker_id = (idx // 26) % 1000
-        worker_files[worker_id]["input_files"].append(str(file))
-        worker_files[worker_id]["output_file"] = output_filename_func(
-            worker_id, output_dir
-        )
-    return dict(worker_files)
+def distribute_files(files, output_pattern, output_dir, group_by, max_jobs=1):
 
+    def default_to_regular(d):
+        if isinstance(d, defaultdict):
+            d = {k: default_to_regular(v) for k, v in d.items()}
+        return d
 
-def distribute_files11(files, nfinal_files, output_filename_func, output_dir):
-    worker_files = defaultdict(lambda: {"input_files": [], "output_file": ""})
-    files_per_worker = len(files) // nfinal_files
-    for idx, file in enumerate(files):
-        worker_id = idx // files_per_worker
-        # worker_id = (idx // 26) % 1000
-        worker_files[worker_id]["input_files"].append(str(file))
-        worker_files[worker_id]["output_file"] = output_filename_func(
-            worker_id, output_dir
-        )
-    return dict(worker_files)
-
-
-def main(directories, patterns, num_workers, output_filename_func, output_dir):
-    print("Searching files...")
-    directories = normalize_input(directories)
-    patterns = normalize_input(patterns)
-    files = get_files_from_directories(directories, patterns)
-    # files = filter_files_by_date(files)
-    print(f"Found {len(files)} files")
-    distributed_files = distribute_files(
-        files, num_workers, output_filename_func, output_dir
+    dbase = defaultdict(
+        lambda: defaultdict(lambda: {"input_files": [], "output_file": ""})
     )
-    assert np.sum(
-        [len(val["input_files"]) for val in distributed_files.values()]
-    ) == len(files)
-    return distributed_files
+
+    print(f"max_jobs = {max_jobs}")
+
+    for i, file in enumerate(files):
+        group_id = i // group_by
+        job_id = group_id % max_jobs
+        dbase[job_id][group_id]["input_files"].append(str(file))
+        dbase[job_id][group_id]["output_file"] = str(
+            Path(output_dir) / output_pattern.format(group_id)
+        ).strip()
+
+    return default_to_regular(dbase)
 
 
 def filter_files_by_date(files):
@@ -82,14 +68,6 @@ def filter_files_by_date(files):
         if file_date <= 160603:
             filtered_files.append(file)
     return sorted(filtered_files)
-
-
-def generate_output_filename(worker_index, output_dir):
-    return str(output_dir / f"temp_{worker_index:05}.h5").strip()
-
-
-def generate_output_filename1(worker_index, output_dir):
-    return str(output_dir / f"pfe_mc_{worker_index:03}.h5").strip()
 
 
 def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
@@ -109,19 +87,12 @@ def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
         script,
         options,
         suffix="_worker_job",
-        # batch_command="bash",
     )
 
 
-def generate_db(
-    data_dirs,
-    glob_patterns,
-    output_dir,
-    num_temp_h5_files,
-    num_final_h5_files,
-):
+def generate_db(config):
 
-    output_dir = Path(output_dir)
+    output_dir = Path(config.output_dir)
     db_files = [output_dir / "jobs_pass1.json", output_dir / "jobs_pass2.json"]
 
     data_base = []
@@ -130,30 +101,50 @@ def generate_db(
             with open(db_file, "r") as f:
                 data_base.append(json.load(f))
 
-    print(f"Here is ok, {db_files}")
     if len(data_base) == 2:
         return data_base, db_files
 
     data_base = [None, None]
 
-    data_base[0] = main(
-        data_dirs,
-        glob_patterns,
-        num_temp_h5_files,
-        generate_output_filename,
-        output_dir / "temp_files",
+    files = find_files(config.data_dirs, config.glob_patterns)
+    files = sorted(files, key=lambda x: x.name)
+
+    if hasattr(config, "temp_group_by"):
+        group_by = config.temp_group_by
+    else:
+        group_by = 26
+
+    data_base[0] = distribute_files(
+        files=files,
+        output_pattern="temp_{:05}.h5",
+        output_dir=output_dir / "temp_files",
+        group_by=group_by,
+        max_jobs=config.njobs_temp_pass,
     )
 
-    h5_files = []
-    for key in data_base[0]:
-        h5_files.append(data_base[0][key]["output_file"])
+    print(f"data_base[0] = {len(data_base[0])}")
 
-    data_base[1] = distribute_files11(
-        h5_files,
-        num_final_h5_files,
-        generate_output_filename1,
-        output_dir / "final_files",
+    files = []
+    for job_key in data_base[0]:
+        for file_key in data_base[0][job_key]:
+            files.append(Path(data_base[0][job_key][file_key]["output_file"]))
+
+    files = sorted(files, key=lambda x: x.name)
+
+    if hasattr(config, "final_group_by"):
+        group_by = config.final_group_by
+    else:
+        group_by = len(files) / 20
+
+    data_base[1] = distribute_files(
+        files=files,
+        output_pattern=config.file_name_pattern + "_{:03}.h5",
+        output_dir=output_dir / "final_files",
+        group_by=group_by,
+        max_jobs=config.njobs_final_pass,
     )
+
+    print(f"data_base[1] = {len(data_base[1])}")
 
     for i in range(2):
         with open(db_files[i], "w") as f:
@@ -162,25 +153,64 @@ def generate_db(
     return data_base, db_files
 
 
-def main_job(data_base, db_files, log_dir, configfile):
+def wait_until_ready(temp_files, log_dir):
+    max_time_to_wait = 2 * 3600  # in sec
+    check_every = 10  # sec
 
-    config = parse_config(configfile)
+    print("Waiting...")
+    log_file = Path(log_dir) / "log_main.dat"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    ready = True
-    for task_id, task in data_base[0].items():
-        # print("OUTPUT FILES FROM DB", task["output_file"])
-        if not Path(task["output_file"]).exists():
-            print(f'{task["output_file"]} not exists')
-            ready = False
+    for i in range(max_time_to_wait):
+        ready_num = 0
+        all_ready = True
+        info_str = ""
+        for i, temp_file in enumerate(temp_files):
+            if not Path(temp_file).exists():
+                all_ready = False
+                ready_task = False
+            else:
+                ready_num += 1
+                ready_task = True
+
+            fname = str(Path(temp_file)).strip()
+            info_str += f"\n{i} {fname} ready {ready_task}"
+
+        info_str += (
+            f"\nAfter {i*check_every}/{max_time_to_wait} sec ({i*check_every/max_time_to_wait*100:.1f}%)"
+            f"\nReady num = {ready_num}/{len(temp_files)}"
+        )
+
+        with open(log_file, "a") as f:
+            f.write(info_str)
+
+        if all_ready:
             break
-        if not ready:
+
+        time.sleep(check_every)
+
+    return all_ready
+
+
+def main_job(data_base, db_files, log_dir, config):
+
+    print("Hey")
+    # Find temp files
+    temp_files = []
+    for task in data_base[0].values():
+        for group in task.values():
+            temp_files.append(group["output_file"])
+
+    # Test for temp files existance
+    temp_files_ready = True
+    for temp_file in temp_files:
+        if not Path(temp_file).exists():
+            temp_files_ready = False
             break
 
-    print(f"READY {ready}")
-    if not ready:
-        print("Temp files are not ready!")
-        print(db_files)
-        print(db_files[0])
+    print(f"Launching slurm {~temp_files_ready}")
+    # Launch slurm if temp files not ready
+    if not temp_files_ready:
         run_dstparser_job(
             len(data_base[0]),
             db_files[0],
@@ -189,53 +219,18 @@ def main_job(data_base, db_files, log_dir, configfile):
             config=config,
         )
 
-    ready_tasks = dict()
-    ready = True
+    print("Wait unit ready")
+    # Wait when all temp files are ready
+    all_ready = wait_until_ready(temp_files, log_dir)
 
-    log_file = Path(log_dir) / "log_main.dat"
-    print("log_file", log_file)
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    max_time_to_wait = 2 * 3600  # in sec
-    check_every = 10  # sec
-    for i in range(max_time_to_wait):
-        ready = True
-        for task_id, task in data_base[1].items():
-            ready_tasks[task_id] = True
-            for ifile in task["input_files"]:
-                if not Path(ifile).exists():
-                    ready = False
-                    ready_tasks[task_id] = False
-
-        info_str = ""
-        ready_num = 0
-        for task_id, task in data_base[1].items():
-
-            if ready_tasks[task_id]:
-                ready_num += 1
-            fname = str(Path(task["output_file"])).strip()
-            info_str += f"\n{task_id} {fname} ready {ready_tasks[task_id]}"
-
-        print(f"READY = {ready}")
-        if ready:
-            break
-        info_str += f"\nAfter {i*check_every}/{max_time_to_wait} sec ({i*check_every/max_time_to_wait*100:.1f}%)\nReady num = {ready_num}/{len(ready_tasks)}"
-
-        with open(log_file, "a") as f:
-            f.write(info_str)
-
-        time.sleep(check_every)
-
-    if not ready:
-        return
-
-    run_dstparser_job(
-        len(data_base[1]),
-        db_files[1],
-        task_name="join_hdf5",
-        log_dir=log_dir,
-        config=config,
-    )
+    if all_ready:
+        run_dstparser_job(
+            len(data_base[1]),
+            db_files[1],
+            task_name="join_hdf5",
+            log_dir=log_dir,
+            config=config,
+        )
 
 
 if __name__ == "__main__":
@@ -251,52 +246,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l", "--log_dir", type=str, required=True, help="Directory for slurm output"
     )
-    parser.add_argument(
-        "-d",
-        "--data_dirs",
-        type=str,
-        nargs="+",
-        required=True,
-        help="Space-separated list of directories where to search data files",
-    )
-    parser.add_argument(
-        "-g",
-        "--glob_patterns",
-        type=str,
-        nargs="+",
-        required=True,
-        help="Space-separated list of patterns for data files",
-    )
-    parser.add_argument(
-        "-o",
-        "--output_dir",
-        type=str,
-        required=True,
-        help="Directory for output HDF5 files",
-    )
-
-    parser.add_argument(
-        "-t",
-        "--temp_h5_files",
-        type=int,
-        default=1000,
-        help="Number of temporary HDF5 files (default: 1000)",
-    )
-    parser.add_argument(
-        "-f",
-        "--final_h5_files",
-        type=int,
-        default=100,
-        help="Number of final HDF5 files (default: 100)",
-    )
-
     args = parser.parse_args()
+    config = parse_config(args.configfile)
 
-    data_base, db_files = generate_db(
-        args.data_dirs,
-        args.glob_patterns,
-        args.output_dir,
-        args.temp_h5_files,
-        args.final_h5_files,
-    )
-    main_job(data_base, db_files, log_dir=args.log_dir, configfile=args.configfile)
+    data_base, db_files = generate_db(config)
+    print("Before main")
+    main_job(data_base, db_files, log_dir=args.log_dir, config=config)

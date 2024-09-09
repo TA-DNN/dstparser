@@ -45,19 +45,42 @@ glob_patterns = "DAT*dst.gz"
 #     "/path/to/file2.dst.gz",
 # ]
 
+
 # -------------------------
 # OUTPUT:
 # -------------------------
 
-# Number of final output files
-# Adjust based on the expected number of final files
-num_final_files = 20
+# Explanation:
+# The conversion happens in 2 steps.
+# First step "temp pass" converts dst files and writes them in multiple temp files.
+# The original dst files grouped by "temp_group_by" files to produces one temp file.
+# The task is separated between "njobs_temp_pass" slurm jobs.
+
+# The "final pass" merge temporary files to larger files.
+# The temporary files grouped by "final_group_by" files to produce one final file.
+# The task is done by "njobs_final_pass" slurm jobs.
+
+# Temp pass:
+
+# Group original files to temp file by group
+# By default temp_group_by = 26 group energy bins will produce 1000 temp files
+temp_group_by = 26
+# Number of jobs for the step that creates temporary files
+njobs_temp_pass = 50
+
+# Final pass:
+
+# Group/merge temp files by group of final_group_by
+# In default settings divide 1000 files by 50 files = 20 final files
+final_group_by = 50
+# Number of jobs for the step that merge temporary files
+njobs_final_pass = 50
 
 # Prefix for the final file names
-# Example: if file_name_pattern = "prot", output files will be "prot01.h5", "prot02.h5", etc.
+# Example: if file_name_pattern = "prot", output files will be "prot_01.h5", "prot_02.h5", etc.
 file_name_pattern = "ni_full"
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/10_test_mc_nitrogen/"
+    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/12_test_mc_nitrogen/"
 )
