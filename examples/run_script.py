@@ -7,7 +7,8 @@ import numpy as np
 # -------------------------
 
 # Provide numerical code for data set
-data_set_root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+# data_set_root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+data_set_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
 data_set_base = dict()
 
 data_set_base[(data_set_root + "qgsii04proton/080417_160603/Em1_bsdinfo").strip()] = (
@@ -43,19 +44,19 @@ def add_event_ids(data, filename):
     # TA MC
     elif ifname_parts[0].startswith("DAT"):
         # Add corsika_shower_id CCCC for the scheme DATCCCCXX
-        key, value = "corsika_shower_id", int(ifname_parts[0][3:7])
+        key, value = "id_corsika_shower", int(ifname_parts[0][3:7])
         keys.append(key)
         values.append(value)
 
         # Add energy bin id XX for the scheme DATCCCCXX
-        key, value = "energy_bin_id", int(ifname_parts[0][7:9])
+        key, value = "id_energy_bin", int(ifname_parts[0][7:9])
         keys.append(key)
         values.append(value)
 
         # Add data set id
         dset_key = str(Path(filename).parent)
         if data_set_base.get(dset_key):
-            keys.append("data_set_id")
+            keys.append("id_data_set")
             values.append(data_set_base[dset_key])
 
     else:
@@ -63,7 +64,7 @@ def add_event_ids(data, filename):
 
     if len(keys) > 0:
         data_len = next(iter(data.values())).shape[0]
-        data["event_id"] = np.arange(data_len)
+        data["id_event"] = np.arange(data_len)
         for key, value in zip(keys, values):
             data[key] = np.full((data_len,), value, dtype=np.int64)
 
@@ -82,7 +83,7 @@ slurm_settings = {
     # "exclude": "hpa-wn[11,13]",
     "mem": "20gb",
     "cpus-per-task": 1,
-    "partition": "hdr1-al9_short",
+    "partition": "edr1_short",
     "time": "01:00:00",
 }
 
@@ -154,5 +155,5 @@ file_name_pattern = "ni_full"
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/15_test_mc_nitrogen/"
+    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/01_nitrogen_qgsii04/"
 )

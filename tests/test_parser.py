@@ -7,7 +7,10 @@ import sys
 
 def test_parser(dst_file, print_read_data=False):
 
-    config = parse_config(sys.argv[1])
+    if len(sys.argv) > 1:
+        config = parse_config(sys.argv[1])
+    else:
+        config = None
     start = time()
 
     # The only function that are required to parsing
@@ -42,12 +45,13 @@ def test_parser(dst_file, print_read_data=False):
     # print(f'event id = {data["event_id"]}')
     # print(f'corsika shower id = {data["corsika_shower_id"]}')
     # print(f'energy bin id = {data["energy_bin_id"]}')
-    # print(f'event_id = {data["event_id"]}')
-    # print(f'corsika_shower_id = {data["corsika_shower_id"]}')
-    # print(f'energy_bin_id = {data["energy_bin_id"]}')
-    # print(f'data_set_id = {data["data_set_id"]}')
+    if config is not None:
+        print(f'event_id = {data["id_event"]}')
+        print(f'corsika_shower_id = {data["id_corsika_shower"]}')
+        print(f'energy_bin_id = {data["id_energy_bin"]}')
+        print(f'data_set_id = {data["id_data_set"]}')
 
 
 if __name__ == "__main__":
-    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
+    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
     test_parser(dst_file, print_read_data=True)

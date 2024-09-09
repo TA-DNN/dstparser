@@ -2,40 +2,27 @@ import argparse
 import sys
 from pathlib import Path
 import importlib
-from .slurm import run_slurm_job
+from dstparser.cli.slurm import run_slurm_job, copy_files
 
 
 def run_main_job(config):
 
-    print(config.output_dir)
-
-    data_dirs = " ".join(config.data_dirs)
-
-    if hasattr(config, "num_temp_files"):
-        num_temp_files = config.num_temp_files
-    else:
-        num_temp_files = 1000
+    copy_files(Path(config.__file__), Path(config.output_dir))
 
     script = Path(__file__).parent / "main_job.py"
     log_dir = Path(config.output_dir) / "slurm_run"
     options = f"--log_dir {str(log_dir)} "
-    # options += f"--data_dirs {data_dirs} "
-    # options += f'--glob_patterns "{config.glob_patterns}" '
-    # options += f"--output_dir {config.output_dir} "
-    # options += f"--temp_h5_files {num_temp_files} "
-    # options += f"--final_h5_files {config.num_final_files} "
-    options += f"--configfile {config.__file__}"
+    copied_config = Path(config.output_dir) / Path(config.__file__).name
+    options += f"--configfile {str(copied_config)}"
 
     print(options)
 
-    print("OKKK")
     run_slurm_job(
         config.slurm_settings,
         log_dir,
         script,
         options,
         suffix="_main_job",
-        # batch_command="bash",
     )
 
 

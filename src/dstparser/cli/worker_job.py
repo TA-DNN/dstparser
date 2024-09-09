@@ -67,11 +67,10 @@ def dst_to_hdf5(ifiles, ofile, config):
         )
 
         if data is None:
-            print(f"Data is empty for {file}")
             continue
 
         # Filter data
-        data = filter_full_tiles(data, max_events=50)
+        # data = filter_full_tiles(data, max_events=50)
 
         # Distribute by fields
         for key, value in data.items():

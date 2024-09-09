@@ -162,7 +162,7 @@ def wait_until_ready(temp_files, log_dir):
     log_file = Path(log_dir) / "log_main.dat"
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    for i in range(max_time_to_wait):
+    for itime in range(max_time_to_wait):
         ready_num = 0
         all_ready = True
         info_str = ""
@@ -178,8 +178,8 @@ def wait_until_ready(temp_files, log_dir):
             info_str += f"\n{i} {fname} ready {ready_task}"
 
         info_str += (
-            f"\nAfter {i*check_every}/{max_time_to_wait} sec ({i*check_every/max_time_to_wait*100:.1f}%)"
-            f"\nReady num = {ready_num}/{len(temp_files)}"
+            f"\nAfter {itime*check_every}/{max_time_to_wait} sec ({itime*check_every/max_time_to_wait*100:.1f}%)"
+            f"\nReady num = {ready_num}/{len(temp_files)}, {ready_num/len(temp_files)}%"
         )
 
         with open(log_file, "a") as f:
