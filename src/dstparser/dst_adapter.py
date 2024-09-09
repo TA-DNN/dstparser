@@ -2,7 +2,6 @@ import numpy as np
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
-from dstparser.event_ids import add_event_ids
 import re
 from pathlib import Path
 
@@ -363,7 +362,7 @@ def parse_dst_file(
     avg_traces=True,
     add_shower_params=True,
     add_standard_recon=True,
-    # add_event_id=
+    config=None,
 ):
     #  ntile - number of SD per one side
     dst_string = read_dst_file(dst_file)
@@ -386,6 +385,6 @@ def parse_dst_file(
 
     data = detector_readings(data, dst_lists, ntile, avg_traces)
 
-    if add_event_ids:
-        data = add_event_ids(data, dst_file)
+    if (config is not None) and (hasattr(config, "add_event_ids")):
+        data = config.add_event_ids(data, dst_file)
     return data

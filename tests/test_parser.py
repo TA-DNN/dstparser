@@ -1,9 +1,13 @@
 import numpy as np
 from dstparser import parse_dst_file
 from time import time
+from dstparser.cli.cli import parse_config
+import sys
 
 
 def test_parser(dst_file, print_read_data=False):
+
+    config = parse_config(sys.argv[1])
     start = time()
 
     # The only function that are required to parsing
@@ -18,6 +22,7 @@ def test_parser(dst_file, print_read_data=False):
         avg_traces=False,
         add_shower_params=True,
         add_standard_recon=True,
+        config=config,
     )
 
     end = time()
@@ -37,6 +42,10 @@ def test_parser(dst_file, print_read_data=False):
     # print(f'event id = {data["event_id"]}')
     # print(f'corsika shower id = {data["corsika_shower_id"]}')
     # print(f'energy bin id = {data["energy_bin_id"]}')
+    # print(f'event_id = {data["event_id"]}')
+    # print(f'corsika_shower_id = {data["corsika_shower_id"]}')
+    # print(f'energy_bin_id = {data["energy_bin_id"]}')
+    # print(f'data_set_id = {data["data_set_id"]}')
 
 
 if __name__ == "__main__":

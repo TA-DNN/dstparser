@@ -78,7 +78,8 @@ def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
     script = Path(__file__).parent / "worker_job.py"
     # for task_id in range(max_jobs):
     # fout = f"/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/07/07_ta_data/file_{task_id}.out"
-    options = f"{str(db_file).strip()} {task_name}"
+    options = f"{str(db_file).strip()} {task_name} "
+    options += f"{str(Path(config.__file__)).strip()}"
     log_dir = Path(log_dir)
     print(f"Options = {options}")
     run_slurm_job(

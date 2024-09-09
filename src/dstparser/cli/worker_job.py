@@ -8,9 +8,10 @@ from dstparser.xmax_reader import XmaxReader
 from dstparser.cli.io import read_h5, save2hdf5
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
+from dstparser.cli.cli import parse_config
 
 
-def process_files(task_function):
+def process_files(task_function, config):
 
     task_id, ntasks = task_info()
     if task_id is None:
@@ -32,10 +33,10 @@ def process_files(task_function):
         ifiles = task[ofile_id]["input_files"]
         ofile = task[ofile_id]["output_file"]
         Path(ofile).parent.mkdir(parents=True, exist_ok=True)
-        task_function(ifiles, ofile)
+        task_function(ifiles, ofile, config)
 
 
-def dst_to_hdf5(ifiles, ofile):
+def dst_to_hdf5(ifiles, ofile, config):
 
     acc_data = dict()
     xmax_dir = Path(ifiles[0]).parent
@@ -62,6 +63,7 @@ def dst_to_hdf5(ifiles, ofile):
             avg_traces=False,
             add_shower_params=True,
             add_standard_recon=True,
+            config=config,
         )
 
         if data is None:
@@ -78,9 +80,11 @@ def dst_to_hdf5(ifiles, ofile):
     save2hdf5(acc_data, ofile)
 
 
-def join_hdf5(ifiles, ofile):
+def join_hdf5(ifiles, ofile, config):
     acc_data = dict()
-    for ifile in tqdm(ifiles, total=len(ifiles), desc=f"Joining files for {ofile}"):
+    for ifile in tqdm(
+        ifiles, total=len(ifiles), desc=f"Joining files for {Path(ofile).name}"
+    ):
         data = read_h5(ifile)
         # Distribute by fields
         for key, value in data.items():
@@ -91,10 +95,12 @@ def join_hdf5(ifiles, ofile):
 
 def worker_job():
 
+    config = parse_config(sys.argv[3])
+
     if sys.argv[2] == "parse_dst":
-        process_files(dst_to_hdf5)
+        process_files(dst_to_hdf5, config)
     elif sys.argv[2] == "join_hdf5":
-        process_files(join_hdf5)
+        process_files(join_hdf5, config)
 
 
 if __name__ == "__main__":

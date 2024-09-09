@@ -1,3 +1,75 @@
+from pathlib import Path
+import re
+import numpy as np
+
+# -------------------------
+# EVENT ID SCHEME:
+# -------------------------
+
+# Provide numerical code for data set
+data_set_root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+data_set_base = dict()
+
+data_set_base[(data_set_root + "qgsii04proton/080417_160603/Em1_bsdinfo").strip()] = (
+    10010001
+)
+
+data_set_base[(data_set_root + "qgsii04helium/080417_160603/Em1_bsdinfo").strip()] = (
+    10040001
+)
+
+data_set_base[(data_set_root + "qgsii04nitrogen/080417_160603/Em1_bsdinfo").strip()] = (
+    10140001
+)
+
+data_set_base[(data_set_root + "qgsii04iron/080417_160603/Em1_bsdinfo").strip()] = (
+    10560001
+)
+
+
+# Function that adds id fields to h5 files
+def add_event_ids(data, filename):
+    """Write additional information retrived from file name"""
+    ifname = Path(filename).parts[-1]
+    ifname_parts = re.split(r"[_,.\s]", ifname)
+
+    keys = []
+    values = []
+    # TA DATA
+    if ifname_parts[0].startswith("tasdcalibev"):
+        key, value = "ta_obs_date", int(ifname_parts[2])
+        keys.append(key)
+        values.append(value)
+    # TA MC
+    elif ifname_parts[0].startswith("DAT"):
+        # Add corsika_shower_id CCCC for the scheme DATCCCCXX
+        key, value = "corsika_shower_id", int(ifname_parts[0][3:7])
+        keys.append(key)
+        values.append(value)
+
+        # Add energy bin id XX for the scheme DATCCCCXX
+        key, value = "energy_bin_id", int(ifname_parts[0][7:9])
+        keys.append(key)
+        values.append(value)
+
+        # Add data set id
+        dset_key = str(Path(filename).parent)
+        if data_set_base.get(dset_key):
+            keys.append("data_set_id")
+            values.append(data_set_base[dset_key])
+
+    else:
+        key, value = None, None
+
+    if len(keys) > 0:
+        data_len = next(iter(data.values())).shape[0]
+        data["event_id"] = np.arange(data_len)
+        for key, value in zip(keys, values):
+            data[key] = np.full((data_len,), value, dtype=np.int64)
+
+    return data
+
+
 # -------------------------
 # SLURM SETTINGS:
 # -------------------------
@@ -27,7 +99,7 @@ slurm_settings = {
 # ]
 
 data_dirs = [
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo",
 ]
 
 # Glob patterns to match DST files to be processed
@@ -82,5 +154,5 @@ file_name_pattern = "ni_full"
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/12_test_mc_nitrogen/"
+    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/15_test_mc_nitrogen/"
 )
