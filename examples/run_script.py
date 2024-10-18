@@ -15,6 +15,10 @@ data_set_base[(data_set_root + "qgsii04proton/080417_160603/Em1_bsdinfo").strip(
     10010001
 )
 
+data_set_base[
+    (data_set_root + "qgsii03proton/080511_230511/noCuts_HiResSpectrum").strip()
+] = 10010002
+
 data_set_base[(data_set_root + "qgsii04helium/080417_160603/Em1_bsdinfo").strip()] = (
     10040001
 )
@@ -26,6 +30,9 @@ data_set_base[(data_set_root + "qgsii04nitrogen/080417_160603/Em1_bsdinfo").stri
 data_set_base[(data_set_root + "qgsii04iron/080417_160603/Em1_bsdinfo").strip()] = (
     10560001
 )
+
+
+data_set_base[(data_set_root + "qgsii03iron/6yrs").strip()] = 10560002
 
 
 # Function that adds id fields to h5 files
@@ -100,7 +107,7 @@ slurm_settings = {
 # ]
 
 data_dirs = [
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii03iron/6yrs",
 ]
 
 # Glob patterns to match DST files to be processed
@@ -145,7 +152,7 @@ njobs_temp_pass = 50
 
 # Group/merge temp files by group of final_group_by
 # In default settings divide 1000 files by 50 files = 20 final files
-final_group_by = 50
+final_group_by = 5
 # Number of jobs for the step that merge temporary files
 njobs_final_pass = 50
 
@@ -155,5 +162,5 @@ file_name_pattern = "final"
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/09/04_iron_qgsii04/"
+    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/10/02_iron_qgsii03/"
 )

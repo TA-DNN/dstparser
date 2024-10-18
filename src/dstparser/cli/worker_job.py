@@ -40,8 +40,8 @@ def dst_to_hdf5(ifiles, ofile, config):
 
     acc_data = dict()
     xmax_dir = Path(ifiles[0]).parent
-    xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
-    # xmax_reader = None
+    # xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
+    xmax_reader = None
     for file in tqdm(
         ifiles, total=len(ifiles), desc=f"DST conversion for {Path(ofile).name}"
     ):
@@ -87,6 +87,8 @@ def join_hdf5(ifiles, ofile, config):
         data = read_h5(ifile)
         # Distribute by fields
         for key, value in data.items():
+            if key in ["time_traces_low", "time_traces_up"]:
+                continue
             acc_data.setdefault(key, []).append(value)
 
     save2hdf5(acc_data, ofile)
