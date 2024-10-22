@@ -5,7 +5,8 @@ __version__ = version("dstparser")
 
 
 __all__ = [
-    "parse_dst_file" "dst_adapter",
+    "parse_dst_file",
+    "dst_adapter",
     "dst_parsers",
     "dst_reader",
     "env_vars",

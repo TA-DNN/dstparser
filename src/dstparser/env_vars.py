@@ -1,5 +1,6 @@
 import subprocess
 
+
 def script_vars(shell_script, script_args=""):
     """
     Compare environment variables before and after running a shell script
@@ -55,7 +56,9 @@ def script_vars(shell_script, script_args=""):
 
     # Identify added and changed variables by comparing before and after dictionaries
     added_or_changed_vars = {
-        var: vars_after[var] for var in vars_after if var not in vars_before or vars_after[var] != vars_before[var]
+        var: vars_after[var]
+        for var in vars_after
+        if var not in vars_before or vars_after[var] != vars_before[var]
     }
 
     return added_or_changed_vars
@@ -67,11 +70,11 @@ def changed_env_paths(shell_script):
     """
     # It contains leftovers from functions
     added_vars = script_vars(shell_script)
-    
+
     # Take only if contains paths, i.e. starts with "/"
     env_paths = dict()
     for key, val in added_vars.items():
-        if isinstance(val, str) and val[0] == "/":
+        if isinstance(val, str) and (len(val) > 0) and val[0] == "/":
             env_paths[key] = val
-    
-    return env_paths        
+
+    return env_paths
