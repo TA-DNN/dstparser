@@ -119,9 +119,12 @@ def read_h5(filename):
     return data
 
 
-def save2hdf5(acc_data, filename, np_dtype=np.float32):
-    compress_arrs = ["time", "arrival", "detector"]
-
+def save2hdf5(
+    acc_data,
+    filename,
+    np_dtype=np.float32,
+    compress_arrs=["time", "arrival", "detector"],
+):
     nattempts = 5
     for iattempt in range(nattempts):
         with h5py.File(filename, "w") as f:
