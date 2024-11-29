@@ -98,32 +98,62 @@ def standard_recon(data, dst_lists):
     # S800 (particle density at 800 m from the shower axis) [VEM m-2]
     data["std_recon_s800"] = event_list[21]
     # 3-d unit vector of the arrival direction (pointing back to the source)
+    # free curved parameter.
+    # "+0.5" is a correction for zenith angle.
     data["std_recon_shower_axis"] = np.array(
         [
-            np.sin(np.deg2rad(event_list[22]))
+            np.sin(np.deg2rad(event_list[32] + 0.5))
+            * np.cos(np.deg2rad(event_list[33]) + np.pi),
+            np.sin(np.deg2rad(event_list[32] + 0.5))
+            * np.sin(np.deg2rad(event_list[33]) + np.pi),
+            np.cos(np.deg2rad(event_list[32] + 0.5)),
+        ],
+        dtype=np.float32,
+    ).transpose()
+    # 3-d unit vector of the arrival direction (pointing back to the source)
+    # fixed curved parameter
+    # "+0.5" is a correction for zenith angle.
+    data["std_recon_shower_axis_fixed_curve"] = np.array(
+        [
+            np.sin(np.deg2rad(event_list[22] + 0.5))
             * np.cos(np.deg2rad(event_list[23]) + np.pi),
-            np.sin(np.deg2rad(event_list[22]))
+            np.sin(np.deg2rad(event_list[22] + 0.5))
             * np.sin(np.deg2rad(event_list[23]) + np.pi),
-            np.cos(np.deg2rad(event_list[22])),
+            np.cos(np.deg2rad(event_list[22] + 0.5)),
         ],
         dtype=np.float32,
     ).transpose()
     # uncertainty of the pointing direction [degree]
+    # free curved parameter
     # event_list[22] is zenith angle in deg
     # event_list[24] is uncertainty zenith angle in deg
     # event_list[25] is uncertainty azimuth angle in deg
     data["std_recon_shower_axis_err"] = np.sqrt(
+        event_list[34] * event_list[34]
+        + np.sin(np.deg2rad(event_list[32]))
+        * np.sin(np.deg2rad(event_list[32]))
+        * event_list[35]
+        * event_list[35]
+    )
+    # uncertainty of the pointing direction [degree]
+    # fixed curved parameter
+    data["std_recon_shower_axis_err_fixed_curve"] = np.sqrt(
         event_list[24] * event_list[24]
         + np.sin(np.deg2rad(event_list[22]))
         * np.sin(np.deg2rad(event_list[22]))
         * event_list[25]
         * event_list[25]
     )
-    # chi-square of the geometry fit
-    data["std_recon_geom_chi2"] = event_list[26]
+    # chi-square of the geometry fit (free curvature)
+    data["std_recon_geom_chi2"] = event_list[36]
+    # the number of degree of freedom of the geometry fit (= n - 6),
+    # where "n" is the number of the SDs used for the geometry fit
+    data["std_recon_geom_ndof"] = event_list[37]
+    # chi-square of the geometry fit (fixed curvature)
+    data["std_recon_geom_chi2_fixed_curve"] = event_list[26]
     # the number of degree of freedom of the geometry fit (= n - 5),
     # where "n" is the number of the SDs used for the geometry fit
-    data["std_recon_geom_ndof"] = event_list[27]
+    data["std_recon_geom_ndof_fixed_curve"] = event_list[27]
     # distance b/w the reconstructed core and the edge from the TA SD array [in 1,200 meter unit]
     # negative for events with the core outside of the TA SD array.
     data["std_recon_border_distance"] = event_list[30]
