@@ -65,10 +65,23 @@ def standard_recon(data, dst_lists):
     # Microseconds for the second
     # rusdraw_.usec = 111111
     data["std_recon_usec"] = event_list[11]
-    # Number of waveforms for event for all detectors (not very useful so far)
-    # data["std_recon_nofwf"] = event_list[10]
+    # Number of waveforms for event for all detectors 
+    data["std_recon_nofwf"] = event_list[10]
     # number of SDs in space-time cluster
     data["std_recon_nsd"] = event_list[9]
+    # number of SDs in space cluster
+    data["std_recon_nsclust"] = event_list[57]
+    # number of hit SDs
+    data["std_recon_nhits"] = event_list[56]
+    # number of SDs in space-time cluster & lie on the border of the array 
+    data["std_recon_nborder"] = event_list[58]
+    # total charge [VEM] of SDs in the space-time cluster, (lower & upper)
+    data["std_recon_qtot"] = np.array(
+        [
+            event_list[59],
+            event_list[60],
+        ]
+    ).transpose(1, 0)
     # energy reconstructed by the standard energy estimation table [EeV]
     data["std_recon_energy"] = event_list[12]
     # reconstructed scale of the Lateral Distribution Function (LDF) fit [VEM m-2]
@@ -97,8 +110,32 @@ def standard_recon(data, dst_lists):
     ).transpose(1, 0)
     # S800 (particle density at 800 m from the shower axis) [VEM m-2]
     data["std_recon_s800"] = event_list[21]
+
+    # reconstructed values of the geometry+LDF (combined) fit
+    data["std_recon_combined_energy"] = event_list[42]
+    data["std_recon_combined_scale"] = event_list[43]
+    data["std_recon_combined_scale_err"] = event_list[44]
+    data["std_recon_combined_chi2"] = event_list[45]
+    # the number of degree of freedom of the LDF fit (= 2*n - 6),
+    # where "n" is the number of the SDs used for the LDF fit
+    data["std_recon_combined_ndof"] = event_list[46]
+    data["std_recon_combined_shower_core"] = np.array(
+        [
+            rec_coreposition_to_CLF_meters(event_list[47], option="x"),
+            rec_coreposition_to_CLF_meters(event_list[49], option="y"),
+        ]
+    ).transpose(1, 0)
+    data["std_recon_combined_shower_core_err"] = np.array(
+        [
+            rec_coreposition_to_CLF_meters(event_list[48], option="dx"),
+            rec_coreposition_to_CLF_meters(event_list[50], option="dy"),
+        ]
+    ).transpose(1, 0)
+    data["std_recon_combined_s800"] = event_list[51]
+
+
     # 3-d unit vector of the arrival direction (pointing back to the source)
-    # free curved parameter.
+    # geometry fit with a free curved parameter.
     # "+0.5" is a correction for zenith angle.
     data["std_recon_shower_axis"] = np.array(
         [
@@ -111,7 +148,7 @@ def standard_recon(data, dst_lists):
         dtype=np.float32,
     ).transpose()
     # 3-d unit vector of the arrival direction (pointing back to the source)
-    # fixed curved parameter
+    # geometry fit with a fixed curved parameter
     # "+0.5" is a correction for zenith angle.
     data["std_recon_shower_axis_fixed_curve"] = np.array(
         [
@@ -120,6 +157,19 @@ def standard_recon(data, dst_lists):
             np.sin(np.deg2rad(event_list[22] + 0.5))
             * np.sin(np.deg2rad(event_list[23]) + np.pi),
             np.cos(np.deg2rad(event_list[22] + 0.5)),
+        ],
+        dtype=np.float32,
+    ).transpose()
+    # 3-d unit vector of the arrival direction (pointing back to the source)
+    # geometry+LDF fit
+    # "+0.5" is a correction for zenith angle.
+    data["std_recon_shower_axis_combined"] = np.array(
+        [
+            np.sin(np.deg2rad(event_list[52] + 0.5))
+            * np.cos(np.deg2rad(event_list[53]) + np.pi),
+            np.sin(np.deg2rad(event_list[52] + 0.5))
+            * np.sin(np.deg2rad(event_list[53]) + np.pi),
+            np.cos(np.deg2rad(event_list[52] + 0.5)),
         ],
         dtype=np.float32,
     ).transpose()
@@ -144,11 +194,24 @@ def standard_recon(data, dst_lists):
         * event_list[25]
         * event_list[25]
     )
+    # uncertainty of the pointing direction [degree]
+    # geometry+LDF fit
+    data["std_recon_shower_axis_err_combined"] = np.sqrt(
+        event_list[54] * event_list[54]
+        + np.sin(np.deg2rad(event_list[52]))
+        * np.sin(np.deg2rad(event_list[52]))
+        * event_list[55]
+        * event_list[55]
+    )
     # chi-square of the geometry fit (free curvature)
     data["std_recon_geom_chi2"] = event_list[36]
     # the number of degree of freedom of the geometry fit (= n - 6),
     # where "n" is the number of the SDs used for the geometry fit
     data["std_recon_geom_ndof"] = event_list[37]
+    # curvature paramter `a` of the geometry fit 
+    data["std_recon_curvature"] = event_list[40]
+    # uncertainty of the curvature paramter `a` of the geometry fit 
+    data["std_recon_curvature_err"] = event_list[41]
     # chi-square of the geometry fit (fixed curvature)
     data["std_recon_geom_chi2_fixed_curve"] = event_list[26]
     # the number of degree of freedom of the geometry fit (= n - 5),
@@ -334,6 +397,10 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         wform = wform[:, inside_tile]
         fadc_per_vem_low = event[9][inside_tile]
         fadc_per_vem_up = event[10][inside_tile]
+        
+        # foldedness of the hit (over how many 128 fadc widnows this signal extends)
+        # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is (3-1) = 2.
+        data["nfold"][ievt, ixy[0], ixy[1]] = event[11][inside_tile]
 
         if avg_traces:
             atimes = (event[2] + event[3]) / 2

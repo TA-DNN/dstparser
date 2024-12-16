@@ -86,6 +86,11 @@ def parse_event(event_list_str):
     #       rusdgeom_.dphi[2], rusdgeom_.chi2[2], rusdgeom_.ndof[2], 
     #       rusdgeom_.t0[2], rusdgeom_.dt0[2], rusdgeom_.a,
     #       rusdgeom_.da
+    # 42-46 rufldf_.energy[0], rufldf_.sc[0], rufldf_.dsc[0],
+    #       rufldf_.chi2[0], rufldf_.ndof[0], 
+    # 47-51 rufldf_.xcore[1], rufldf_.dxcore[1], rufldf_.ycore[1], rufldf_.dycore[1], rufldf_.s800[1],
+    # 52-55 rufldf_.theta, rufldf_.phi, rufldf_.dtheta, rufldf_.dphi 
+    # 56-60 rufptn_.nhits, rufptn_.nsclust, rufptn_.nborder, rufptn_.qtot[0], rufptn_.qtot[1]
     """
 
     event_list = [np.fromstring(line, sep=" ") for line in event_list_str]
@@ -105,9 +110,9 @@ def parse_sdmeta(sdmeta_list_str):
                      "rufptn_.xyzclf[1]",
                      "rufptn_.xyzclf[2]",
                      "rufptn_.vem[0]",
-                     "rufptn_.vem[1]"]
+                     "rufptn_.vem[1]",
+                     "rufptn_.nfold"]
     """
-
     ## Detection related
 
     record_size = 11
