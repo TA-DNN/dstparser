@@ -74,17 +74,23 @@ def parse_event(event_list_str):
     # 9 rufptn_.nstclust,
     # 10 rusdraw_.nofwf,
     # 11 rusdraw_.usec
-    event_format = ["mass_number",
-                    "rusdmc_energy",
-                    "rusdmc_theta",
-                    "rusdmc_phi",
-                    "rusdmc_corexyz[0]",
-                    "rusdmc_corexyz[1]",
-                    "rusdmc_corexyz[2]",
-                    "rusdraw_yymmdd",
-                    "rusdraw_hhmmss",
-                    "rufptn_nstclust",
-                    "rusdraw_nofwf"]
+    # 12-16 rufldf_.energy[0], rufldf_.sc[0], rufldf_.dsc[0],
+    #       rufldf_.chi2[0], rufldf_.ndof[0],
+    # 17-21 rufldf_.xcore[0], rufldf_.dxcore[0], rufldf_.ycore[0],
+    #       rufldf_.dycore[0], rufldf_.s800[0],
+    # 22-29 rusdgeom_.theta[1], rusdgeom_.phi[1], rusdgeom_.dtheta[1],
+    #       rusdgeom_.dphi[1], rusdgeom_.chi2[1], rusdgeom_.ndof[1],
+    #       rusdgeom_.t0[1], rusdgeom_.dt0[1]
+    # 30-31 rufldf_.bdist, rufldf_.tdist,
+    # 32-41 rusdgeom_.theta[2], rusdgeom_.phi[2], rusdgeom_.dtheta[2],
+    #       rusdgeom_.dphi[2], rusdgeom_.chi2[2], rusdgeom_.ndof[2],
+    #       rusdgeom_.t0[2], rusdgeom_.dt0[2], rusdgeom_.a,
+    #       rusdgeom_.da
+    # 42-46 rufldf_.energy[0], rufldf_.sc[0], rufldf_.dsc[0],
+    #       rufldf_.chi2[0], rufldf_.ndof[0],
+    # 47-51 rufldf_.xcore[1], rufldf_.dxcore[1], rufldf_.ycore[1], rufldf_.dycore[1], rufldf_.s800[1],
+    # 52-55 rufldf_.theta, rufldf_.phi, rufldf_.dtheta, rufldf_.dphi
+    # 56-60 rufptn_.nhits, rufptn_.nsclust, rufptn_.nborder, rufptn_.qtot[0], rufptn_.qtot[1]
     """
 
     event_list = [np.fromstring(line, sep=" ") for line in event_list_str]
@@ -104,12 +110,12 @@ def parse_sdmeta(sdmeta_list_str):
                      "rufptn_.xyzclf[1]",
                      "rufptn_.xyzclf[2]",
                      "rufptn_.vem[0]",
-                     "rufptn_.vem[1]"]
+                     "rufptn_.vem[1]",
+                     "rufptn_.nfold"]
     """
-
     ## Detection related
 
-    record_size = 11
+    record_size = 12
     sdmeta_list = [
         np.fromstring(line, sep=" ").reshape(-1, record_size).transpose()
         for line in sdmeta_list_str
