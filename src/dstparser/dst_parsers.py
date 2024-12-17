@@ -83,13 +83,13 @@ def parse_event(event_list_str):
     #       rusdgeom_.t0[1], rusdgeom_.dt0[1]
     # 30-31 rufldf_.bdist, rufldf_.tdist,
     # 32-41 rusdgeom_.theta[2], rusdgeom_.phi[2], rusdgeom_.dtheta[2],
-    #       rusdgeom_.dphi[2], rusdgeom_.chi2[2], rusdgeom_.ndof[2], 
+    #       rusdgeom_.dphi[2], rusdgeom_.chi2[2], rusdgeom_.ndof[2],
     #       rusdgeom_.t0[2], rusdgeom_.dt0[2], rusdgeom_.a,
     #       rusdgeom_.da
     # 42-46 rufldf_.energy[0], rufldf_.sc[0], rufldf_.dsc[0],
-    #       rufldf_.chi2[0], rufldf_.ndof[0], 
+    #       rufldf_.chi2[0], rufldf_.ndof[0],
     # 47-51 rufldf_.xcore[1], rufldf_.dxcore[1], rufldf_.ycore[1], rufldf_.dycore[1], rufldf_.s800[1],
-    # 52-55 rufldf_.theta, rufldf_.phi, rufldf_.dtheta, rufldf_.dphi 
+    # 52-55 rufldf_.theta, rufldf_.phi, rufldf_.dtheta, rufldf_.dphi
     # 56-60 rufptn_.nhits, rufptn_.nsclust, rufptn_.nborder, rufptn_.qtot[0], rufptn_.qtot[1]
     """
 
@@ -115,7 +115,7 @@ def parse_sdmeta(sdmeta_list_str):
     """
     ## Detection related
 
-    record_size = 11
+    record_size = 12
     sdmeta_list = [
         np.fromstring(line, sep=" ").reshape(-1, record_size).transpose()
         for line in sdmeta_list_str

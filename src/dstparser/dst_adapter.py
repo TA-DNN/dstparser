@@ -65,7 +65,7 @@ def standard_recon(data, dst_lists):
     # Microseconds for the second
     # rusdraw_.usec = 111111
     data["std_recon_usec"] = event_list[11]
-    # Number of waveforms for event for all detectors 
+    # Number of waveforms for event for all detectors
     data["std_recon_nofwf"] = event_list[10]
     # number of SDs in space-time cluster
     data["std_recon_nsd"] = event_list[9]
@@ -73,7 +73,7 @@ def standard_recon(data, dst_lists):
     data["std_recon_nsclust"] = event_list[57]
     # number of hit SDs
     data["std_recon_nhits"] = event_list[56]
-    # number of SDs in space-time cluster & lie on the border of the array 
+    # number of SDs in space-time cluster & lie on the border of the array
     data["std_recon_nborder"] = event_list[58]
     # total charge [VEM] of SDs in the space-time cluster, (lower & upper)
     data["std_recon_qtot"] = np.array(
@@ -132,7 +132,6 @@ def standard_recon(data, dst_lists):
         ]
     ).transpose(1, 0)
     data["std_recon_combined_s800"] = event_list[51]
-
 
     # 3-d unit vector of the arrival direction (pointing back to the source)
     # geometry fit with a free curved parameter.
@@ -208,9 +207,9 @@ def standard_recon(data, dst_lists):
     # the number of degree of freedom of the geometry fit (= n - 6),
     # where "n" is the number of the SDs used for the geometry fit
     data["std_recon_geom_ndof"] = event_list[37]
-    # curvature paramter `a` of the geometry fit 
+    # curvature paramter `a` of the geometry fit
     data["std_recon_curvature"] = event_list[40]
-    # uncertainty of the curvature paramter `a` of the geometry fit 
+    # uncertainty of the curvature paramter `a` of the geometry fit
     data["std_recon_curvature_err"] = event_list[41]
     # chi-square of the geometry fit (fixed curvature)
     data["std_recon_geom_chi2_fixed_curve"] = event_list[26]
@@ -363,6 +362,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
     data["detector_states"] = np.zeros(shape, dtype=bool)
     data["detector_exists"] = np.zeros(shape, dtype=bool)
     data["detector_good"] = np.zeros(shape, dtype=bool)
+    data["nfold"] = np.zeros(shape, dtype=np.float32)
 
     if avg_traces:
         data["arrival_times"] = np.zeros(shape, dtype=np.float32)
@@ -397,7 +397,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         wform = wform[:, inside_tile]
         fadc_per_vem_low = event[9][inside_tile]
         fadc_per_vem_up = event[10][inside_tile]
-        
+
         # foldedness of the hit (over how many 128 fadc widnows this signal extends)
         # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is (3-1) = 2.
         data["nfold"][ievt, ixy[0], ixy[1]] = event[11][inside_tile]
