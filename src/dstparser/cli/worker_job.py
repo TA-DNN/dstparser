@@ -84,11 +84,18 @@ def join_hdf5(ifiles, ofile, config):
     for ifile in tqdm(
         ifiles, total=len(ifiles), desc=f"Joining files for {Path(ofile).name}"
     ):
+
+        skipped_arrays = None
+        if hasattr(config, "skipped_arrays"):
+            skipped_arrays = config.skipped_arrays
+
         data = read_h5(ifile)
         # Distribute by fields
         for key, value in data.items():
-            if key in ["time_traces_low", "time_traces_up"]:
-                continue
+            if skipped_arrays is not None:
+                # Sometimes we need to skip ["time_traces_low", "time_traces_up"]
+                if key in skipped_arrays:
+                    continue
             acc_data.setdefault(key, []).append(value)
 
     save2hdf5(acc_data, ofile)

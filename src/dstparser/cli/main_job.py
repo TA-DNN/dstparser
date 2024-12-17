@@ -108,6 +108,10 @@ def generate_db(config):
     data_base = [None, None]
 
     files = find_files(config.data_dirs, config.glob_patterns)
+
+    if hasattr(config, "filter_data_files"):
+        files = config.filter_data_files(files)
+
     files = sorted(files, key=lambda x: x.name)
 
     if hasattr(config, "temp_group_by"):
