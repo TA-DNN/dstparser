@@ -36,7 +36,7 @@ def find_files(dirs, globs):
     return files
 
 
-def distribute_files(files, output_pattern, output_dir, group_by, max_jobs=1):
+def distribute_files(files, output_pattern, output_dir, assign_group_id, assign_job_id):
 
     def default_to_regular(d):
         if isinstance(d, defaultdict):
@@ -47,15 +47,20 @@ def distribute_files(files, output_pattern, output_dir, group_by, max_jobs=1):
         lambda: defaultdict(lambda: {"input_files": [], "output_file": ""})
     )
 
-    print(f"max_jobs = {max_jobs}")
-
-    for i, file in enumerate(files):
-        group_id = i // group_by
-        job_id = group_id % max_jobs
+    for file in files:
+        group_id = assign_group_id(file)
+        job_id = assign_job_id(group_id)
         dbase[job_id][group_id]["input_files"].append(str(file))
         dbase[job_id][group_id]["output_file"] = str(
             Path(output_dir) / output_pattern.format(group_id)
         ).strip()
+
+    # Sort files by name inside group
+    for job_id in dbase:
+        for group_id in dbase[job_id]:
+            dbase[job_id][group_id]["input_files"] = sorted(
+                dbase[job_id][group_id]["input_files"], key=lambda x: Path(x).name
+            )
 
     return default_to_regular(dbase)
 
@@ -73,11 +78,9 @@ def filter_files_by_date(files):
 def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
     slurm_settings = config.slurm_settings
     slurm_settings["array"] = f"0-{max_jobs - 1}"
-    # slurm_settings["mem"] = "5gb"
 
     script = Path(__file__).parent / "worker_job.py"
-    # for task_id in range(max_jobs):
-    # fout = f"/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/07/07_ta_data/file_{task_id}.out"
+
     options = f"{str(db_file).strip()} {task_name} "
     options += f"{str(Path(config.__file__)).strip()}"
     log_dir = Path(log_dir)
@@ -114,20 +117,16 @@ def generate_db(config):
 
     files = sorted(files, key=lambda x: x.name)
 
-    if hasattr(config, "temp_group_by"):
-        group_by = config.temp_group_by
-    else:
-        group_by = 26
-
     data_base[0] = distribute_files(
         files=files,
         output_pattern="temp_{:05}.h5",
         output_dir=output_dir / "temp_files",
-        group_by=group_by,
-        max_jobs=config.njobs_temp_pass,
+        assign_group_id=config.temp_group_id,
+        assign_job_id=config.temp_job_id,
     )
 
     print(f"data_base[0] = {len(data_base[0])}")
+    print(f"data_base[0] = {data_base[0]}")
 
     files = []
     for job_key in data_base[0]:
@@ -136,17 +135,12 @@ def generate_db(config):
 
     files = sorted(files, key=lambda x: x.name)
 
-    if hasattr(config, "final_group_by"):
-        group_by = config.final_group_by
-    else:
-        group_by = len(files) / 20
-
     data_base[1] = distribute_files(
         files=files,
         output_pattern=config.file_name_pattern + "_{:03}.h5",
         output_dir=output_dir / "final_files",
-        group_by=group_by,
-        max_jobs=config.njobs_final_pass,
+        assign_group_id=config.final_group_id,
+        assign_job_id=config.final_job_id,
     )
 
     print(f"data_base[1] = {len(data_base[1])}")
@@ -198,8 +192,6 @@ def wait_until_ready(temp_files, log_dir):
 
 
 def main_job(data_base, db_files, log_dir, config):
-
-    print("Hey")
     # Find temp files
     temp_files = []
     for task in data_base[0].values():

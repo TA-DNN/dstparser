@@ -78,3 +78,12 @@ def changed_env_paths(shell_script):
             env_paths[key] = val
 
     return env_paths
+
+
+def is_alma_linux():
+    try:
+        with open("/etc/os-release", "r") as f:
+            os_release_info = f.read()
+            return "AlmaLinux" in os_release_info
+    except FileNotFoundError:
+        return "/etc/os-release not found. Unable to determine distribution."
