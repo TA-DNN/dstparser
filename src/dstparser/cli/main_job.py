@@ -47,8 +47,9 @@ def distribute_files(files, output_pattern, output_dir, assign_group_id, assign_
         lambda: defaultdict(lambda: {"input_files": [], "output_file": ""})
     )
 
-    for file in files:
-        group_id = assign_group_id(file)
+    len_files = len(files)
+    for file_id, file in enumerate(files):
+        group_id = assign_group_id(file, file_id, len_files)
         job_id = assign_job_id(group_id)
         dbase[job_id][group_id]["input_files"].append(str(file))
         dbase[job_id][group_id]["output_file"] = str(
