@@ -129,7 +129,9 @@ def save2hdf5(
     for iattempt in range(nattempts):
         with h5py.File(filename, "w") as f:
             for key, value in acc_data.items():
-                value = np.concatenate(value, axis=0)
+
+                if isinstance(value, list):
+                    value = np.concatenate(value, axis=0)
 
                 if isinstance(value, np.ndarray) and np.issubdtype(
                     value.dtype, np.floating
