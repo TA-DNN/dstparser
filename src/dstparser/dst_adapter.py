@@ -367,11 +367,14 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
     if avg_traces:
         data["arrival_times"] = np.zeros(shape, dtype=np.float32)
         data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
+        data["total_signals"] = np.zeros(shape, dtype=np.float32)
     else:
         data["arrival_times_low"] = np.zeros(shape, dtype=np.float32)
         data["arrival_times_up"] = np.zeros(shape, dtype=np.float32)
         data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
         data["time_traces_up"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
+        data["total_signals_low"] = np.zeros(shape, dtype=np.float32)
+        data["total_signals_up"] = np.zeros(shape, dtype=np.float32)
 
     empty_events = []
 
@@ -399,7 +402,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         fadc_per_vem_up = event[10][inside_tile]
 
         # foldedness of the hit (over how many 128 fadc widnows this signal extends)
-        # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is (3-1) = 2.
+        # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is 3.
         data["nfold"][ievt, ixy[0], ixy[1]] = event[11][inside_tile]
 
         if avg_traces:
@@ -411,6 +414,11 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
                 + wform[ntime_trace:] / fadc_per_vem_up
             ) / 2
             data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+
+            data["total_signals"][ievt, ixy[0], ixy[1]] = (
+                event[4][inside_tile] + event[5][inside_tile]
+            ) / 2
+
         else:
             ttrace = wform[:ntime_trace] / fadc_per_vem_low
             data["time_traces_low"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
@@ -424,6 +432,9 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
             data["arrival_times_up"][ievt, ixy[0], ixy[1]] = (
                 event[3][inside_tile] * to_nsec
             )
+
+            data["total_signals_low"][ievt, ixy[0], ixy[1]] = event[4][inside_tile]
+            data["total_signals_up"][ievt, ixy[0], ixy[1]] = event[5][inside_tile]
 
         if avg_traces:
             data["arrival_times"][ievt, :, :] = np.where(
@@ -440,13 +451,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
                 )
 
     # Remove empty events
-    # print(f"Total events in the file = {len(sdmeta_list)}")
-    # print(f"Empty events = {len(empty_events)}")
-    # print(f"Empty/total = {len(empty_events)/len(sdmeta_list)}")
     if len(empty_events) != 0:
-        # print(f"Total events in the file = {len(sdmeta_list)}")
-        # print(f"Empty events = {len(empty_events)}")
-        # print(f"Empty/total = {len(empty_events)/len(sdmeta_list)}")
         for key, value in data.items():
             data[key] = np.delete(value, empty_events, axis=0)
     return data
