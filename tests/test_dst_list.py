@@ -9,14 +9,14 @@ from dstparser.cli.cli import parse_config
 
 
 def test_parser(dst_file, print_read_data=False):
-    # Parse configuration if provided
+    # Load config if provided
     if len(sys.argv) > 1:
         config = parse_config(sys.argv[1])
     else:
         config = None
 
+    # Parse DST into structured data dict
     start = time()
-    # Use the standard parser to build the data dict
     data = parse_dst_file(
         dst_file,
         ntile=7,
@@ -30,16 +30,36 @@ def test_parser(dst_file, print_read_data=False):
     print(f"Parse time: {end - start:.3f} sec")
 
     if print_read_data:
+        # Inspect raw DST sections
+        dst_string = read_dst_file(dst_file)
+        dst_lists = parse_dst_string(dst_string)
+        section_names = ['event_list', 'sdmeta_list', 'sdwaveform_list', 'badsdinfo_list']
+        print("\nRaw DST sections and shapes:")
+        if dst_lists is None:
+            print("No DST sections (empty file).")
+        else:
+            for name, section in zip(section_names, dst_lists):
+                if isinstance(section, np.ndarray):
+                    print(f"{name}: array shape {section.shape}")
+                elif isinstance(section, list):
+                    print(f"{name}: list length {len(section)}")
+                    for idx, arr in enumerate(section):
+                        if isinstance(arr, np.ndarray):
+                            print(f"  {name}[{idx}]: array shape {arr.shape}")
+                        else:
+                            print(f"  {name}[{idx}]: type {type(arr)}")
+
+        # Inspect parsed data dictionary
         print("\nParsed data keys and shapes:")
         for key, val in data.items():
             if isinstance(val, np.ndarray):
-                print(f"{key} {val.shape}")
+                print(f"{key}: {val.shape}")
             elif isinstance(val, list):
-                print(f"{key} list length {len(val)}")
+                print(f"{key}: list length {len(val)}")
             else:
                 print(f"{key}: type {type(val)}")
 
-    # Example of other prints when using config
+    # Print config-based IDs if available
     if config is not None:
         print(f'id_event = {data.get("id_event", "N/A")}')
         print(f'id_corsika_shower = {data.get("id_corsika_shower", "N/A")}')
