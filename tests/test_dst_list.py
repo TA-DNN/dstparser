@@ -43,21 +43,21 @@ def test_parser(dst_file, print_read_data=False):
                     print(f"{name}: array shape {section.shape}")
                 elif isinstance(section, list):
                     print(f"{name}: list length {len(section)}")
-                    for idx, arr in enumerate(section):
+                    for idx, arr in enumerate(section[0:5]):
                         if isinstance(arr, np.ndarray):
                             print(f"  {name}[{idx}]: array shape {arr.shape}")
                         else:
                             print(f"  {name}[{idx}]: type {type(arr)}")
 
         # Inspect parsed data dictionary
-        print("\nParsed data keys and shapes:")
-        for key, val in data.items():
-            if isinstance(val, np.ndarray):
-                print(f"{key}: {val.shape}")
-            elif isinstance(val, list):
-                print(f"{key}: list length {len(val)}")
-            else:
-                print(f"{key}: type {type(val)}")
+        # print("\nParsed data keys and shapes:")
+        # for key, val in data.items():
+        #     if isinstance(val, np.ndarray):
+        #         print(f"{key}: {val.shape}")
+        #     elif isinstance(val, list):
+        #         print(f"{key}: list length {len(val)}")
+        #     else:
+        #         print(f"{key}: type {type(val)}")
 
     # Print config-based IDs if available
     if config is not None:

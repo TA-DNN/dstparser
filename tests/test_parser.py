@@ -58,4 +58,4 @@ if __name__ == "__main__":
         "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
     )
     # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
-    test_parser(dst_file, print_read_data=True)
+    test_parser(dst_file, print_read_data=False)
