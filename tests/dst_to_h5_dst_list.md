@@ -2,36 +2,36 @@
 
 ## 1. SDMETA Physical Parameters
 
-Each entry in `sdmeta_list` is an array of shape `(12, n_detectors)`.  Each row index `i` corresponds to a parameter array of shape `(n_detectors,)`:
+Each entry in `sdmeta_list` is an array of shape `(12, n_entries)`.  Each row index `i` corresponds to a parameter array of shape `(n_detectors,)`:
 
 | Row | Parameter       | Field name       | Description                                | Units / Notes  | Row Shape        |
 | --- | --------------- | ---------------- | ------------------------------------------ | -------------- | ---------------- |
-| 0   | `sd_id`         | `rufptn_.xxyy`   | Detector code: grid‑x & grid‑y             | integer code   | `(n_detectors,)` |
-| 1   | `sd_isgood`     | `rufptn_.isgood` | Quality flag (1 = good, 0 = bad)           | boolean        | `(n_detectors,)` |
-| 2   | `sd_reltime_lo` | `reltime[0]`     | Arrival time from lower PMT                | FADC time‑bins | `(n_detectors,)` |
-| 3   | `sd_reltime_up` | `reltime[1]`     | Arrival time from upper PMT                | FADC time‑bins | `(n_detectors,)` |
-| 4   | `sd_pulsa_lo`   | `pulsa[0]`       | Pulse amplitude (lower PMT)                | FADC counts    | `(n_detectors,)` |
-| 5   | `sd_pulsa_up`   | `pulsa[1]`       | Pulse amplitude (upper PMT)                | FADC counts    | `(n_detectors,)` |
-| 6   | `sd_xclf`       | `xyzclf[0]`      | X‑coordinate in CLF system                 | cm (×1e‑2 → m) | `(n_detectors,)` |
-| 7   | `sd_yclf`       | `xyzclf[1]`      | Y‑coordinate in CLF system                 | cm (×1e‑2 → m) | `(n_detectors,)` |
-| 8   | `sd_zclf`       | `xyzclf[2]`      | Z‑coordinate (height) in CLF system        | cm (×1e‑2 → m) | `(n_detectors,)` |
-| 9   | `sd_vem_lo`     | `vem[0]`         | FADC counts per VEM (lower channel)        | counts / VEM   | `(n_detectors,)` |
-| 10  | `sd_vem_up`     | `vem[1]`         | FADC counts per VEM (upper channel)        | counts / VEM   | `(n_detectors,)` |
-| 11  | `sd_nfold`      | `nfold`          | Number of 128‑bin windows the signal spans | integer        | `(n_detectors,)` |
+| 0   | `sd_id`         | `rufptn_.xxyy`   | Detector code: grid‑x & grid‑y             | integer code   | `(n_entries,)` |
+| 1   | `sd_isgood`     | `rufptn_.isgood` | Quality flag (1 = good, 0 = bad)           | boolean        | `(n_entries,)` |
+| 2   | `sd_reltime_lo` | `reltime[0]`     | Arrival time from lower PMT                | FADC time‑bins | `(n_entries,)` |
+| 3   | `sd_reltime_up` | `reltime[1]`     | Arrival time from upper PMT                | FADC time‑bins | `(n_entries,)` |
+| 4   | `sd_pulsa_lo`   | `pulsa[0]`       | Pulse amplitude (lower PMT)                | FADC counts    | `(n_entries,)` |
+| 5   | `sd_pulsa_up`   | `pulsa[1]`       | Pulse amplitude (upper PMT)                | FADC counts    | `(n_entries,)` |
+| 6   | `sd_xclf`       | `xyzclf[0]`      | X‑coordinate in CLF system                 | cm (×1e‑2 → m) | `(n_entries,)` |
+| 7   | `sd_yclf`       | `xyzclf[1]`      | Y‑coordinate in CLF system                 | cm (×1e‑2 → m) | `(n_entries,)` |
+| 8   | `sd_zclf`       | `xyzclf[2]`      | Z‑coordinate (height) in CLF system        | cm (×1e‑2 → m) | `(n_entries,)` |
+| 9   | `sd_vem_lo`     | `vem[0]`         | FADC counts per VEM (lower channel)        | counts / VEM   | `(n_entries,)` |
+| 10  | `sd_vem_up`     | `vem[1]`         | FADC counts per VEM (upper channel)        | counts / VEM   | `(n_entries,)` |
+| 11  | `sd_nfold`      | `nfold`          | Number of 128‑bin windows the signal spans | integer        | `(n_entries,)` |
 
 ---
 
 ## 2. SDWAVEFORM Physical Parameters
 
-Each entry in `sdwaveform_list` is an array of shape `(259, n_detectors)`.  Each row index `i` yields a vector of shape `(n_detectors,)`:
+Each entry in `sdwaveform_list` is an array of shape `(259, n_detectors)`.  Each row index `i` yields a vector of shape `(n_entries,)`:
 
 | Row idx | Parameter | Description                           | Units       | Row Shape                   |
 | ------- | --------- | ------------------------------------- | ----------- | --------------------------- |
-| 0       | `xxyy`    | Detector code (grid‑x×100 + grid‑y)   | integer     | `(n_detectors,)`            |
-| 1       | `clkcnt`  | Coarse clock count                    | raw ticks   | `(n_detectors,)`            |
-| 2       | `mclkcnt` | Master clock count                    | raw ticks   | `(n_detectors,)`            |
-| 3–130   | `fadc_lo` | Lower-channel FADC samples (128 bins) | FADC counts | `(n_detectors,)` × 128 rows |
-| 131–258 | `fadc_up` | Upper-channel FADC samples (128 bins) | FADC counts | `(n_detectors,)` × 128 rows |
+| 0       | `xxyy`    | Detector code (grid‑x×100 + grid‑y)   | integer     | `(n_entries,)`            |
+| 1       | `clkcnt`  | Coarse clock count                    | raw ticks   | `(n_entries,)`            |
+| 2       | `mclkcnt` | Master clock count                    | raw ticks   | `(n_entries,)`            |
+| 3–130   | `fadc_lo` | Lower-channel FADC samples (128 bins) | FADC counts | `(n_entries,)` × 128 rows |
+| 131–258 | `fadc_up` | Upper-channel FADC samples (128 bins) | FADC counts | `(n_entries,)` × 128 rows |
 
 
 ---
