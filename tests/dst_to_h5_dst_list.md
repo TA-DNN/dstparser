@@ -2,7 +2,7 @@
 
 ## 1. SDMETA Physical Parameters
 
-Each entry in `sdmeta_list` is an array of shape `(12, n_entries)`.  Each row index `i` corresponds to a parameter array of shape `(n_detectors,)`:
+Each entry in `sdmeta_list` is an array of shape `(12, n_entries)`.  Each row index `i` corresponds to a parameter array of shape `(n_entries,)`:
 
 | Row | Parameter       | Field name       | Description                                | Units / Notes  | Row Shape        |
 | --- | --------------- | ---------------- | ------------------------------------------ | -------------- | ---------------- |
@@ -23,7 +23,7 @@ Each entry in `sdmeta_list` is an array of shape `(12, n_entries)`.  Each row in
 
 ## 2. SDWAVEFORM Physical Parameters
 
-Each entry in `sdwaveform_list` is an array of shape `(259, n_detectors)`.  Each row index `i` yields a vector of shape `(n_entries,)`:
+Each entry in `sdwaveform_list` is an array of shape `(259, n_entries)`.  Each row index `i` yields a vector of shape `(n_entries,)`:
 
 | Row idx | Parameter | Description                           | Units       | Row Shape                   |
 | ------- | --------- | ------------------------------------- | ----------- | --------------------------- |
