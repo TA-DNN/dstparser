@@ -1,4 +1,7 @@
 import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
@@ -227,30 +230,35 @@ def standard_recon(data, dst_lists):
 
 
 def cut_events(event, wform):
-    # ! If the signal > 128 bins it is divided on parts with 128 in each
-    # ! The code below takes only first part (waveform) in case if
-    # ! the signal consists of several such parts
-    # Set all repeating elements to False, except first one
-    sdid = event[0]
-    u, c = np.unique(sdid, return_counts=True)
-    dup = u[c > 1]
-    mask = sdid == sdid
-    for el in dup:
-        mask[np.where(sdid == el)[0][1:]] = False
+    # The signal is sometimes split into multiple 128-bin parts.
+    # This function now combines those parts into a single waveform per detector.
 
-    event = event[:, mask]
-    # exclude coincidence signals
-    # the signal is a part of the event
-    event = event[:, event[1] > 2]
+    # Group waveform segments by detector ID (xycoord)
+    sdid = event[0].astype(np.int32)
+    unique_sdids, sdid_indices = np.unique(sdid, return_index=True)
 
-    # Pick corresponding waveforms
-    wform_idx = []
-    for xycoord in event[0].astype(np.int32):
-        # Take only the first waveform (second [0])
-        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
+    # Reconstruct the event array, keeping only the first entry for each detector
+    event_combined = event[:, sdid_indices]
 
-    wform = wform[3:, wform_idx]
-    return event, wform
+    # Combine waveform parts for each unique detector
+    wform_combined = []
+    for unique_id in unique_sdids:
+        # Find all parts of the waveform for the current detector
+        parts_indices = np.where(sdid == unique_id)[0]
+        
+        # Concatenate the waveform data (wform[3:] contains the actual waveform)
+        full_wform = wform[3:, parts_indices].flatten(order='F')
+        wform_combined.append(full_wform)
+
+    # Exclude coincidence signals (where event[1] <= 2)
+    # This check is now done on the combined event array
+    valid_event_mask = event_combined[1] > 2
+    event_final = event_combined[:, valid_event_mask]
+    
+    # Filter the combined waveforms using the same mask
+    wform_final = [w for i, w in enumerate(wform_combined) if valid_event_mask[i]]
+
+    return event_final, wform_final
 
 
 def center_tile(event, ntile):
@@ -350,123 +358,113 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt):
     return data
 
 
-def detector_readings(data, dst_lists, ntile, avg_traces):
-    ntime_trace = 128  # number of time trace of waveform
+def detector_readings(data, dst_lists, avg_traces):
+    """
+    Processes detector readings for each event in a variable-length, event-driven manner.
+    This function replaces the previous tile-based approach.
+    """
     to_nsec = 4 * 1000
+    to_meters = 1e-2
 
-    num_events = dst_lists[0][0].shape[0]
-    shape = num_events, ntile, ntile
-    data["detector_positions"] = np.zeros((*shape, 3), dtype=np.float32)
-    data["detector_positions_abs"] = np.zeros((*shape, 3), dtype=np.float32)
-    data["detector_positions_id"] = np.zeros(shape, dtype=np.float32)
-    data["detector_states"] = np.zeros(shape, dtype=bool)
-    data["detector_exists"] = np.zeros(shape, dtype=bool)
-    data["detector_good"] = np.zeros(shape, dtype=bool)
-    data["nfold"] = np.zeros(shape, dtype=np.float32)
-
-    if avg_traces:
-        data["arrival_times"] = np.zeros(shape, dtype=np.float32)
-        data["time_traces"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
-        data["total_signals"] = np.zeros(shape, dtype=np.float32)
-    else:
-        data["arrival_times_low"] = np.zeros(shape, dtype=np.float32)
-        data["arrival_times_up"] = np.zeros(shape, dtype=np.float32)
-        data["time_traces_low"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
-        data["time_traces_up"] = np.zeros((*shape, ntime_trace), dtype=np.float32)
-        data["total_signals_low"] = np.zeros(shape, dtype=np.float32)
-        data["total_signals_up"] = np.zeros(shape, dtype=np.float32)
-
-    empty_events = []
+    # Initialize lists to hold event-level data
+    events_data = []
+    empty_events_indices = []
 
     sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists[1:4]
 
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
-        # event.shape = (11, number of detectors)
-        event, wform = cut_events(event, wform)
+        event, wforms = cut_events(event, wform)
 
         if event.shape[1] == 0:
-            empty_events.append(ievt)
+            empty_events_indices.append(ievt)
             continue
 
-        ixy0, inside_tile, ixy = center_tile(event, ntile)
-        # Populate absolute detector positions and states
-        data = tile_positions(ixy0, ntile, badsd, data, ievt)
-        # Shift and normalize detector positions and shower cores
-        data = tile_normalization(data, ievt)
+        # --- Event-level data processing ---
+        
+        # Detector IDs and positions
+        det_ids = event[0].astype(np.int32)
+        
+        # Get detector positions from tasd_clf
+        clf_id_map = {int(id_): i for i, id_ in enumerate(tasd_clf.tasdmc_clf[:, 0])}
+        clf_indices = [clf_id_map.get(int(id_), -1) for id_ in det_ids]
+        
+        valid_mask = [idx != -1 for idx in clf_indices]
+        event = event[:, valid_mask]
+        wforms = [w for w, is_valid in zip(wforms, valid_mask) if is_valid]
+        det_ids = det_ids[valid_mask]
+        clf_indices = [idx for idx in clf_indices if idx != -1]
 
-        # Populate detector readings and arrival times
-        wform = wform[:, inside_tile]
-        fadc_per_vem_low = event[9][inside_tile]
-        fadc_per_vem_up = event[10][inside_tile]
+        if not clf_indices: # Skip if no valid detectors left
+            empty_events_indices.append(ievt)
+            continue
 
-        # foldedness of the hit (over how many 128 fadc widnows this signal extends)
-        # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is 3.
-        data["nfold"][ievt, ixy[0], ixy[1]] = event[11][inside_tile]
+        det_pos = tasd_clf.tasdmc_clf[clf_indices, 1:] * to_meters
+        
+        # Detector states
+        is_good = ~np.isin(det_ids, badsd)
+
+        # FADC conversion factors
+        fadc_per_vem_low = event[9]
+        fadc_per_vem_up = event[10]
+
+        # Process waveforms for the current event
+        time_traces = []
+        time_traces_low = []
+        time_traces_up = []
+
+        for i, wf in enumerate(wforms):
+            ntime_trace = len(wf) // 2
+            trace_low = wf[:ntime_trace] / fadc_per_vem_low[i]
+            trace_up = wf[ntime_trace:] / fadc_per_vem_up[i]
+            if avg_traces:
+                time_traces.append((trace_low + trace_up) / 2)
+            else:
+                time_traces_low.append(trace_low)
+                time_traces_up.append(trace_up)
+
+        event_record = {
+            "det_id": det_ids.tolist(),
+            "det_pos": det_pos.tolist(),
+            "det_good": is_good.tolist(),
+        }
 
         if avg_traces:
-            atimes = (event[2] + event[3]) / 2
-            data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
-
-            ttrace = (
-                wform[:ntime_trace] / fadc_per_vem_low
-                + wform[ntime_trace:] / fadc_per_vem_up
-            ) / 2
-            data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
-
-            data["total_signals"][ievt, ixy[0], ixy[1]] = (
-                event[4][inside_tile] + event[5][inside_tile]
-            ) / 2
-
+            event_record["arrival_time"] = ((event[2] + event[3]) / 2 * to_nsec).tolist()
+            event_record["time_trace"] = time_traces
+            event_record["total_signal"] = ((event[4] + event[5]) / 2).tolist()
         else:
-            ttrace = wform[:ntime_trace] / fadc_per_vem_low
-            data["time_traces_low"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+            event_record["arrival_time_low"] = (event[2] * to_nsec).tolist()
+            event_record["arrival_time_up"] = (event[3] * to_nsec).tolist()
+            event_record["time_trace_low"] = time_traces_low
+            event_record["time_trace_up"] = time_traces_up
+            event_record["total_signal_low"] = event[4].tolist()
+            event_record["total_signal_up"] = event[5].tolist()
+        
+        events_data.append(event_record)
 
-            ttrace = wform[ntime_trace:] / fadc_per_vem_up
-            data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
-
-            data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
-                event[2][inside_tile] * to_nsec
-            )
-            data["arrival_times_up"][ievt, ixy[0], ixy[1]] = (
-                event[3][inside_tile] * to_nsec
-            )
-
-            data["total_signals_low"][ievt, ixy[0], ixy[1]] = event[4][inside_tile]
-            data["total_signals_up"][ievt, ixy[0], ixy[1]] = event[5][inside_tile]
-
-        if avg_traces:
-            data["arrival_times"][ievt, :, :] = np.where(
-                data["detector_states"][ievt, :, :],
-                data["arrival_times"][ievt, :, :],
-                0,
-            )
-        else:
-            for arrv_array_name in ["arrival_times_low", "arrival_times_up"]:
-                data[arrv_array_name][ievt, :, :] = np.where(
-                    data["detector_states"][ievt, :, :],
-                    data[arrv_array_name][ievt, :, :],
-                    0,
-                )
-
-    # Remove empty events
-    if len(empty_events) != 0:
+    # Attach the list of event records to the main data dictionary
+    data["events"] = events_data
+    
+    # Filter out other data arrays corresponding to empty events
+    if len(empty_events_indices) > 0:
         for key, value in data.items():
-            data[key] = np.delete(value, empty_events, axis=0)
+            if key != "events" and isinstance(value, np.ndarray) and value.ndim > 0 and value.shape[0] == len(sdmeta_list):
+                data[key] = np.delete(value, empty_events_indices, axis=0)
+
     return data
 
 
 def parse_dst_file(
     dst_file,
-    ntile=7,
     xmax_reader=None,
     avg_traces=True,
     add_shower_params=True,
     add_standard_recon=True,
     config=None,
 ):
-    #  ntile - number of SD per one side
+    #  ntile parameter is no longer used
     dst_string = read_dst_file(dst_file)
     dst_lists = parse_dst_string(dst_string)
 
@@ -485,8 +483,42 @@ def parse_dst_file(
     if add_standard_recon:
         data = standard_recon(data, dst_lists)
 
-    data = detector_readings(data, dst_lists, ntile, avg_traces)
+    data = detector_readings(data, dst_lists, avg_traces)
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
-    return data
+
+    # --- Convert to Pandas DataFrame for Parquet export ---
+    
+    # The 'events' field is a list of dicts, which is not ideal for a DataFrame column.
+    # We will flatten it, creating one row per event, with event-wide data.
+    # The detector-specific data will be stored in list-type columns.
+    
+    if not data.get("events"):
+        return None # No valid events to process
+
+    # Create a DataFrame from the event-wide metadata
+    event_metadata_keys = [k for k in data.keys() if k != 'events']
+    event_df_data = {k: data[k] for k in event_metadata_keys}
+    
+    # Handle cases where some metadata might be empty after filtering
+    num_events = len(data["events"])
+    for key, value in event_df_data.items():
+        if len(value) != num_events:
+            # This is a safeguard, assuming filtering in detector_readings was successful
+            # If lengths mismatch, we can't reliably create a DataFrame
+            return None 
+
+    df = pd.DataFrame(event_df_data)
+
+    # Add the detector readings (list of dicts) as a new column
+    # This will be a column of dictionaries, which we'll expand
+    df['detector_readings'] = data['events']
+
+    # Expand the dictionary of lists into separate columns of lists
+    # e.g., 'det_id' column will contain the list of detector IDs for each event
+    readings_df = pd.json_normalize(df['detector_readings'])
+    df = pd.concat([df.drop(columns=['detector_readings']), readings_df], axis=1)
+
+    return df
+
