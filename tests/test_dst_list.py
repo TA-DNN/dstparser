@@ -6,20 +6,17 @@ from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 from dstparser import parse_dst_file
 from dstparser.cli.cli import parse_config
+import awkward as ak
 
 
 def test_parser(dst_file, print_read_data=False):
     # Load config if provided
-    if len(sys.argv) > 1:
-        config = parse_config(sys.argv[1])
-    else:
-        config = None
+    config = parse_config(sys.argv[1]) if len(sys.argv) > 1 else None
 
-    # Parse DST into structured data dict
+    # Parse DST into an Awkward RecordArray
     start = time()
-    data = parse_dst_file(
+    rec = parse_dst_file(
         dst_file,
-        ntile=7,
         xmax_reader=None,
         avg_traces=False,
         add_shower_params=True,
@@ -28,6 +25,11 @@ def test_parser(dst_file, print_read_data=False):
     )
     end = time()
     print(f"Parse time: {end - start:.3f} sec")
+
+    # Bail out if nothing was parsed
+    if rec is None or len(rec) == 0:
+        print("No data parsed from DST file.")
+        return
 
     if print_read_data:
         # Inspect raw DST sections
@@ -43,28 +45,25 @@ def test_parser(dst_file, print_read_data=False):
                     print(f"{name}: array shape {section.shape}")
                 elif isinstance(section, list):
                     print(f"{name}: list length {len(section)}")
-                    for idx, arr in enumerate(section[0:5]):
+                    for idx, arr in enumerate(section[:5]):
                         if isinstance(arr, np.ndarray):
                             print(f"  {name}[{idx}]: array shape {arr.shape}")
                         else:
                             print(f"  {name}[{idx}]: type {type(arr)}")
 
-        # Inspect parsed data dictionary
-        # print("\nParsed data keys and shapes:")
-        # for key, val in data.items():
-        #     if isinstance(val, np.ndarray):
-        #         print(f"{key}: {val.shape}")
-        #     elif isinstance(val, list):
-        #         print(f"{key}: list length {len(val)}")
-        #     else:
-        #         print(f"{key}: type {type(val)}")
+        # Inspect the Awkward record
+        print("\nAwkward record fields:", ak.fields(rec))
+        print("First event record:", rec[0])
 
-    # Print config-based IDs if available
+    # Print config‐based IDs if available
     if config is not None:
-        print(f'id_event = {data.get("id_event", "N/A")}')
-        print(f'id_corsika_shower = {data.get("id_corsika_shower", "N/A")}')
-        print(f'id_energy_bin = {data.get("id_energy_bin", "N/A")}')
-        print(f'id_data_set = {data.get("id_data_set", "N/A")}')
+        def get_field(name):
+            return rec[name][0] if name in ak.fields(rec) else "N/A"
+
+        print(f"id_event           = {get_field('id_event')}")
+        print(f"id_corsika_shower  = {get_field('id_corsika_shower')}")
+        print(f"id_energy_bin      = {get_field('id_energy_bin')}")
+        print(f"id_data_set        = {get_field('id_data_set')}")
 
 
 if __name__ == "__main__":

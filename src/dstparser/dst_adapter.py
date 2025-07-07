@@ -455,6 +455,17 @@ def detector_readings(data, dst_lists, avg_traces):
 
     return data
 
+import awkward as ak
+import numpy as np
+
+from dstparser.dst_reader import read_dst_file
+from dstparser.dst_parsers import parse_dst_string
+import dstparser.tasd_clf as tasd_clf
+from pathlib import Path
+import re
+
+# (Assume your existing definitions of corsika_id2mass, rec_coreposition_to_CLF_meters,
+#  shower_params, standard_recon, detector_readings, cut_events, etc. are unchanged above.)
 
 def parse_dst_file(
     dst_file,
@@ -464,61 +475,48 @@ def parse_dst_file(
     add_standard_recon=True,
     config=None,
 ):
-    #  ntile parameter is no longer used
-    dst_string = read_dst_file(dst_file)
-    dst_lists = parse_dst_string(dst_string)
+    """
+    Parse a compressed DST file into an Awkward RecordArray.
 
+    Returns None if there are no events.
+    """
+    # 1) Read the DST as a text string
+    dst_string = read_dst_file(dst_file)
+    if dst_string is None:
+        return None
+
+    # 2) Break into sections and parse into numpy arrays/lists
+    dst_lists = parse_dst_string(dst_string)                      # :contentReference[oaicite:3]{index=3}
     if dst_lists is None:
         return None
 
-    # Load xmax info for current dst file
-    if xmax_reader is not None:
-        xmax_reader.read_file(dst_file)
-
-    # Dictionary with parsed data
-    data = dict()
+    # 3) Build up the flat `data` dict via your existing steps
+    data = {}
     if add_shower_params:
-        data = shower_params(data, dst_lists, xmax_reader)
-
+        data = shower_params(data, dst_lists, xmax_reader)        # :contentReference[oaicite:4]{index=4}
     if add_standard_recon:
-        data = standard_recon(data, dst_lists)
+        data = standard_recon(data, dst_lists)                    # :contentReference[oaicite:5]{index=5}
+    data = detector_readings(data, dst_lists, avg_traces)         # :contentReference[oaicite:6]{index=6}
 
-    data = detector_readings(data, dst_lists, avg_traces)
-
-    if (config is not None) and (hasattr(config, "add_event_ids")):
+    # 4) Inject any event IDs (e.g. id_event, id_corsika_shower) from config
+    if config is not None and hasattr(config, "add_event_ids"):
         data = config.add_event_ids(data, dst_file)
 
-    # --- Convert to Pandas DataFrame for Parquet export ---
-    
-    # The 'events' field is a list of dicts, which is not ideal for a DataFrame column.
-    # We will flatten it, creating one row per event, with event-wide data.
-    # The detector-specific data will be stored in list-type columns.
-    
-    if not data.get("events"):
-        return None # No valid events to process
+    # 5) If there were no valid events, bail out
+    n_events = None
+    for v in data.values():
+        if isinstance(v, np.ndarray):
+            n_events = v.shape[0]
+            break
+        elif isinstance(v, list):
+            n_events = len(v)
+            break
+    if not n_events:
+        return None
 
-    # Create a DataFrame from the event-wide metadata
-    event_metadata_keys = [k for k in data.keys() if k != 'events']
-    event_df_data = {k: data[k] for k in event_metadata_keys}
-    
-    # Handle cases where some metadata might be empty after filtering
-    num_events = len(data["events"])
-    for key, value in event_df_data.items():
-        if len(value) != num_events:
-            # This is a safeguard, assuming filtering in detector_readings was successful
-            # If lengths mismatch, we can't reliably create a DataFrame
-            return None 
+    # 6) Zip everything *except* the raw 'events' list into an Awkward RecordArray
+    to_zip = {k: v for k, v in data.items() if k != "events"}
+    # depth_limit=1 ensures that any fixed-length vectors (e.g. 3-vector shower_axis) stay as sub-arrays
+    record_array = ak.zip(to_zip, depth_limit=1)
 
-    df = pd.DataFrame(event_df_data)
-
-    # Add the detector readings (list of dicts) as a new column
-    # This will be a column of dictionaries, which we'll expand
-    df['detector_readings'] = data['events']
-
-    # Expand the dictionary of lists into separate columns of lists
-    # e.g., 'det_id' column will contain the list of detector IDs for each event
-    readings_df = pd.json_normalize(df['detector_readings'])
-    df = pd.concat([df.drop(columns=['detector_readings']), readings_df], axis=1)
-
-    return df
-
+    return record_array
