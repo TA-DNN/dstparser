@@ -106,3 +106,44 @@ The combined `event_list` returned by `parse_dst_string` is an array of shape `(
 ---
 
 *End of combined DST processing overview.*
+
+
+
+Meanings of rufptn_.isgood Values
+The rufptn_.isgood array is a quality flag for each hit in the Surface Detector analysis. Here are the meanings of each value:
+
+isgood[i] = 0: Bad counter/hit
+
+The counter to which the i'th hit corresponds was not working properly
+The hit failed quality checks (e.g., pedestal issues, signal issues)
+These hits are excluded from further analysis
+isgood[i] = 1: Good isolated hit
+
+The i'th hit passed basic quality checks
+It's marked as "good (so far)" but is not part of any clusters
+These are standalone hits that don't contribute to shower reconstruction
+isgood[i] = 2: Space cluster member
+
+The i'th hit is part of a space cluster
+It passed spatial pattern recognition (multiple nearby detectors triggered)
+Upgraded from value 1 after space clustering analysis
+isgood[i] = 3: Space-time cluster member
+
+The i'th hit passed rough time pattern recognition
+It's part of both spatial and temporal clustering
+Shows correlation in both space and time with other hits
+Upgraded from value 2 after time pattern recognition
+isgood[i] = 4: Event reconstruction hit
+
+The i'th hit is part of the reconstructed shower event
+It passed the geometry fitting and chi-squared cleaning procedure
+These hits are used in the final shower reconstruction
+Assigned after geometric fitting in both pass1 and pass2 analysis
+isgood[i] = 5: Saturated counter
+
+The i'th hit corresponds to a saturated counter
+The signal was too large and saturated the detector electronics
+Still part of the event but flagged for special handling
+Typically upgraded from value 4 when saturation is detected
+The progression typically goes: 0 (bad) or 1 (good) → 2 (space cluster) → 3 (space-time cluster) → 4 (event hit) → 5 (saturated event hit).
+
