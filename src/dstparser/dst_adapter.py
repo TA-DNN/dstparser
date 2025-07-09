@@ -230,35 +230,46 @@ def standard_recon(data, dst_lists):
 
 
 def cut_events(event, wform):
-    # The signal is sometimes split into multiple 128-bin parts.
-    # This function now combines those parts into a single waveform per detector.
-
-    # Group waveform segments by detector ID (xycoord)
-    sdid = event[0].astype(np.int32)
-    unique_sdids, sdid_indices = np.unique(sdid, return_index=True)
-
-    # Reconstruct the event array, keeping only the first entry for each detector
-    event_combined = event[:, sdid_indices]
-
-    # Combine waveform parts for each unique detector
-    wform_combined = []
-    for unique_id in unique_sdids:
-        # Find all parts of the waveform for the current detector
-        parts_indices = np.where(sdid == unique_id)[0]
-        
-        # Concatenate the waveform data (wform[3:] contains the actual waveform)
-        full_wform = wform[3:, parts_indices].flatten(order='F')
-        wform_combined.append(full_wform)
-
-    # Exclude coincidence signals (where event[1] <= 2)
-    # This check is now done on the combined event array
-    valid_event_mask = event_combined[1] > 2
-    event_final = event_combined[:, valid_event_mask]
+    # ! If the signal > 128 bins it is divided on parts with 128 in each
+    # ! The code below takes only first part (waveform) in case if
+    # ! the signal consists of several such parts
+    # Set all repeating elements to False, except first one
+    sdid = event[0]
+    u, c = np.unique(sdid, return_counts=True)
+    print("u\n", u)
+    print("c\n", c)
+    print("sdid\n", sdid)
+    print("sdid.astype(np.int32) == 1224\n", sdid.astype(np.int32) == 1224)
+    # print("event.shape\n", event.shape)
+    # print("sdid.shape\n", sdid.shape)
+    # print("event\n", event[-1])
     
-    # Filter the combined waveforms using the same mask
-    wform_final = [w for i, w in enumerate(wform_combined) if valid_event_mask[i]]
+    print("event.isgood\n", event[1])
+    print("event.nfold\n", event[11])
+    
+    # print("event.type", type(event))
+    print("wform.shape\n", wform.shape)
+    print("wform\n", wform[0:3])
+    input()
+    dup = u[c > 1]
+    mask = sdid == sdid
+    for el in dup:
+        mask[np.where(sdid == el)[0][1:]] = False
 
-    return event_final, wform_final
+    event = event[:, mask]
+    # exclude coincidence signals
+    # the signal is a part of the event
+    event = event[:, event[1] > 2]
+
+    # Pick corresponding waveforms
+    wform_idx = []
+    for xycoord in event[0].astype(np.int32):
+        # Take only the first waveform (second [0])
+        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
+
+    wform = wform[3:, wform_idx]
+    
+    return event, wform
 
 
 def center_tile(event, ntile):
