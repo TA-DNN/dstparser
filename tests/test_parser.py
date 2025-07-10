@@ -23,7 +23,7 @@ def test_parser(dst_file, print_read_data=False):
         add_shower_params=True,
         add_standard_recon=True,
         config=config,
-        use_grid_model=False,
+        use_grid_model=True,
     )
     end = time()
     print(f"Parse time: {end - start:.3f} sec")

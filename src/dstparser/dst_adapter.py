@@ -442,10 +442,10 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
         data["hits_total_signals_low"] = ak.unflatten(np.array(hits_total_signals_low), hits_counts)
         data["hits_total_signals_up"] = ak.unflatten(np.array(hits_total_signals_up), hits_counts)
         
-        time_traces_low_flat = ak.unflatten(np.array(hits_time_traces_low), np.sum(ttrace_counts_low))
+        time_traces_low_flat = ak.Array(hits_time_traces_low)
         data["hits_time_traces_low"] = ak.unflatten(time_traces_low_flat, ttrace_counts_low)
         
-        time_traces_up_flat = ak.unflatten(np.array(hits_time_traces_up), np.sum(ttrace_counts_up))
+        time_traces_up_flat = ak.Array(hits_time_traces_up)
         data["hits_time_traces_up"] = ak.unflatten(time_traces_up_flat, ttrace_counts_up)
 
     return data
