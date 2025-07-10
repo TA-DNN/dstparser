@@ -236,12 +236,19 @@ def cut_events(event, wform):
     # the y-coordinate and the last two digits are the x-coordinate.
     # We need to change from yyxx to xxyy format for further processing
     event[0, :] = ((event[0, :] % 100) * 100 + (event[0, :] // 100)).astype(np.int32)
-
+    
+    # print("event shape:", event.shape)
+    
+    # for i, e in enumerate(event):
+    #     print(i, e)
 
     sdid = event[0]
     u, c = np.unique(sdid, return_counts=True)
     dup = u[c > 1]
     mask = sdid == sdid
+    
+    # print(f"duplicate SD IDs: {dup}")
+    
     for el in dup:
         mask[np.where(sdid == el)[0][1:]] = False
 
@@ -267,6 +274,13 @@ def center_tile(event, ntile):
 
     # ix and iy as one array [ix, iy]
     ixy = np.array([event[0] // 100, event[0] % 100]).astype(np.int32)
+    
+    
+    # print(f"ix = {ixy}")
+    # print(f"event[6]= {event[6]}")
+    # print(f"event[7]= {event[7]}")
+    # print(f"event[8]= {event[8]}")
+    
     # Indicies of central detector ix0, iy0
     ixy0 = np.copy(ixy[:, max_signal_idx]) - (ntile - 1) // 2
     ixy -= ixy0[:, np.newaxis]
@@ -277,7 +291,8 @@ def center_tile(event, ntile):
 
 
 def tile_normalization(data, ievt):
-    detector_dist = 1200  # meters
+    # detector_dist = 1200  # meters
+    detector_dist = 2080  #!!! meters, for TAx4
     height_of_clf = 1370  # meters
     height_extent = 30  # meters, height scatter +-30 from average, z-coordinate norm
 
@@ -317,7 +332,7 @@ def tile_normalization(data, ievt):
     return data
 
 
-def tile_positions(ixy0, tile_size, badsd, data, ievt):
+def tile_positions(ixy0, tile_size, badsd, data, ievt, hits_positions, hits_ids):
     # Create centered tile
     # n0 = (tile_size - 1) / 2
     to_meters = 1e-2
@@ -328,32 +343,36 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt):
     x += ixy0[0]
     y += ixy0[1]
     xy_code = x * 100 + y
+    
+    all_ids = hits_ids
+    all_pos = hits_positions
 
-    # Create mask (:, tile_size, tile_size)
-    masks = tasd_clf.tasdmc_clf[:, 0][:, np.newaxis, np.newaxis] == xy_code
-    tasdmc_clf_indices = np.argmax(masks, axis=0)
-    do_exist = masks.any(axis=0)
-    tasdmc_clf_indices = np.where(do_exist, tasdmc_clf_indices, -1)
+    # masks: (n_hits, tile_size, tile_size)
+    masks = all_ids[:, None, None] == xy_code[None, :, :]
+    best_idx = np.argmax(masks, axis=0)           # index into your hits array
+    exists   = masks.any(axis=0)
+    best_idx = np.where(exists, best_idx, -1)
 
-    # Do detectors work:
-    good = ~np.isin(tasd_clf.tasdmc_clf[tasdmc_clf_indices, 0], badsd)
-    status = np.logical_and(good, do_exist)
+    # pull out the IDs & positions per cell
+    cell_ids  = np.where(exists,
+                         all_ids[best_idx],
+                         0)
+    cell_pos  = np.where(exists[...,None],
+                         all_pos[best_idx],
+                         0.0)
 
-    # Absolute coordinates (relative to central laser facility) in meters
-    data["detector_positions"][ievt, :, :, :] = (
-        tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
-    ) * to_meters
+    # good/bad
+    good   = ~np.isin(cell_ids, badsd)
+    status = good & exists
 
-    data["detector_positions_abs"][ievt, :, :, :] = (
-        tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
-    ) * to_meters
-    data["detector_positions_id"][ievt, :, :] = tasd_clf.tasdmc_clf[
-        tasdmc_clf_indices, 0
-    ]
+    # write into data
+    data["detector_positions"][ievt]     = cell_pos * to_meters
+    data["detector_positions_abs"][ievt] = cell_pos * to_meters
+    data["detector_positions_id"][ievt]  = cell_ids
 
-    data["detector_states"][ievt, :, :] = status
-    data["detector_exists"][ievt, :, :] = do_exist
-    data["detector_good"][ievt, :, :] = good
+    data["detector_states"][ievt] = status
+    data["detector_exists"][ievt] = exists
+    data["detector_good"][ievt]   = good
     return data
 
 
@@ -399,7 +418,20 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
 
         ixy0, inside_tile, ixy = center_tile(event, ntile)
         # Populate absolute detector positions and states
-        data = tile_positions(ixy0, ntile, badsd, data, ievt)
+        # -------------------------------------------------------------------
+        # calculate each hit’s absolute (x,y,z) in cm from your event arrays:
+        # event[6], event[7], event[8] are in units of 1200 m (i.e. detector_dist),
+        # so multiply back to meters, then to cm:
+        detector_dist = 1200.0    # [m]
+        # stack into shape (n_hits,3) in **cm**:
+        hits_m = np.vstack([event[6],
+                            event[7],
+                            event[8]]).T * detector_dist
+        hits_cm = hits_m * 100.0
+        hit_ids = event[0].astype(int)
+        
+        
+        data = tile_positions(ixy0, ntile, badsd, data, ievt, hits_cm, hit_ids)
         # Shift and normalize detector positions and shower cores
         data = tile_normalization(data, ievt)
 
