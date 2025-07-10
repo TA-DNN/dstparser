@@ -7,6 +7,9 @@ dst_reader_all_events = "sditerator_printAll.run"
 
 sd_analysis_env = "sdanalysis_env.sh"
 openssl10_alma9 = "/ceph/work/SATORI/projects/TA-ASIoP/benMC/libs_alma9/openssl10"
+openssl10_rocky_linux = (
+    "/ceph/work/SATORI/projects/TA-ASIoP/benMC/libs_rocky_linux/openssl10"
+)
 
 # Data for xmax
 xmax_data_files = "DAT*_xmax.txt"

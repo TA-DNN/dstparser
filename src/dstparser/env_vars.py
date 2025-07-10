@@ -87,3 +87,27 @@ def is_alma_linux():
             return "AlmaLinux" in os_release_info
     except FileNotFoundError:
         return "/etc/os-release not found. Unable to determine distribution."
+
+
+def is_rocky_linux():
+    """
+    Returns True if this host is Rocky Linux (detected via /etc/os-release),
+    False otherwise. If /etc/os-release isn’t present, raises FileNotFoundError.
+    """
+    try:
+        with open("/etc/os-release", "r") as f:
+            data = f.read().lower()
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "/etc/os-release not found. Unable to determine distribution."
+        )
+
+    # Look for either the ID or the pretty name containing "rocky"
+    for key in ("id=", "name=", "pretty_name="):
+        for line in data.splitlines():
+            if line.startswith(key):
+                # strip off KEY= and any quotes
+                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if "rocky" in val:
+                    return True
+    return False
