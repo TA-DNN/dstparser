@@ -72,3 +72,4 @@ if __name__ == "__main__":
     # !If you want to use TA format, set use_ta_x4=False
     # !By default, use_ta_x4=False
     test_parser(dst_file, print_read_data=True, use_ta_x4 = True)
+

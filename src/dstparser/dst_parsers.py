@@ -109,7 +109,7 @@ def parse_sdmeta(sdmeta_list_str):
                      "rufptn_.xyzclf[0]",
                      "rufptn_.xyzclf[1]",
                      "rufptn_.xyzclf[2]",
-                     "rufptn_.vem[0]",
+                     "rufptn_.vem[0]",     #vertical equivalent muon
                      "rufptn_.vem[1]",
                      "rufptn_.nfold"]
     """
