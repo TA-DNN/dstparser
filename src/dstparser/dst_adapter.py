@@ -1,4 +1,5 @@
 import numpy as np
+import awkward as ak
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
@@ -350,6 +351,106 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt):
     return data
 
 
+def detector_readings_awkward(data, dst_lists, avg_traces):
+    to_nsec = 4 * 1000
+    sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists[1:4]
+
+    hits_counts = []
+    hits_det_id = []
+    hits_nfold = []
+
+    if avg_traces:
+        hits_arrival_times = []
+        hits_total_signals = []
+        hits_time_traces = []
+        ttrace_counts = []
+    else:
+        hits_arrival_times_low = []
+        hits_arrival_times_up = []
+        hits_total_signals_low = []
+        hits_total_signals_up = []
+        hits_time_traces_low = []
+        hits_time_traces_up = []
+        ttrace_counts_low = []
+        ttrace_counts_up = []
+
+    empty_events = []
+
+    for ievt, (event, wform, badsd) in enumerate(
+        zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
+    ):
+        event, wform = cut_events(event, wform)
+
+        if event.shape[1] == 0:
+            empty_events.append(ievt)
+            hits_counts.append(0)
+            if avg_traces:
+                ttrace_counts.append(0)
+            else:
+                ttrace_counts_low.append(0)
+                ttrace_counts_up.append(0)
+            continue
+
+        hits_counts.append(event.shape[1])
+        hits_det_id.extend(event[0])
+        hits_nfold.extend(event[11])
+
+        fadc_per_vem_low = event[9]
+        fadc_per_vem_up = event[10]
+
+        if avg_traces:
+            hits_arrival_times.extend((event[2] + event[3]) / 2 * to_nsec)
+            hits_total_signals.extend((event[4] + event[5]) / 2)
+            
+            ntime_trace = 128
+            ttrace = (
+                wform[:ntime_trace] / fadc_per_vem_low
+                + wform[ntime_trace:] / fadc_per_vem_up
+            ) / 2
+            hits_time_traces.extend(ttrace.flatten(order="F"))
+            ttrace_counts.extend([ntime_trace] * event.shape[1])
+        else:
+            hits_arrival_times_low.extend(event[2] * to_nsec)
+            hits_arrival_times_up.extend(event[3] * to_nsec)
+            hits_total_signals_low.extend(event[4])
+            hits_total_signals_up.extend(event[5])
+
+            ntime_trace = 128
+            ttrace_low = wform[:ntime_trace] / fadc_per_vem_low
+            ttrace_up = wform[ntime_trace:] / fadc_per_vem_up
+            hits_time_traces_low.extend(ttrace_low.flatten(order="F"))
+            hits_time_traces_up.extend(ttrace_up.flatten(order="F"))
+            ttrace_counts_low.extend([ntime_trace] * event.shape[1])
+            ttrace_counts_up.extend([ntime_trace] * event.shape[1])
+
+    # Remove empty events from per-event data
+    if len(empty_events) != 0:
+        for key, value in data.items():
+            data[key] = np.delete(value, empty_events, axis=0)
+
+    data["hits_det_id"] = ak.unflatten(np.array(hits_det_id), hits_counts)
+    data["hits_nfold"] = ak.unflatten(np.array(hits_nfold), hits_counts)
+
+    if avg_traces:
+        data["hits_arrival_times"] = ak.unflatten(np.array(hits_arrival_times), hits_counts)
+        data["hits_total_signals"] = ak.unflatten(np.array(hits_total_signals), hits_counts)
+        time_traces_flat = ak.unflatten(np.array(hits_time_traces), np.sum(ttrace_counts))
+        data["hits_time_traces"] = ak.unflatten(time_traces_flat, ttrace_counts)
+    else:
+        data["hits_arrival_times_low"] = ak.unflatten(np.array(hits_arrival_times_low), hits_counts)
+        data["hits_arrival_times_up"] = ak.unflatten(np.array(hits_arrival_times_up), hits_counts)
+        data["hits_total_signals_low"] = ak.unflatten(np.array(hits_total_signals_low), hits_counts)
+        data["hits_total_signals_up"] = ak.unflatten(np.array(hits_total_signals_up), hits_counts)
+        
+        time_traces_low_flat = ak.unflatten(np.array(hits_time_traces_low), np.sum(ttrace_counts_low))
+        data["hits_time_traces_low"] = ak.unflatten(time_traces_low_flat, ttrace_counts_low)
+        
+        time_traces_up_flat = ak.unflatten(np.array(hits_time_traces_up), np.sum(ttrace_counts_up))
+        data["hits_time_traces_up"] = ak.unflatten(time_traces_up_flat, ttrace_counts_up)
+
+    return data
+
+
 def detector_readings(data, dst_lists, ntile, avg_traces):
     ntime_trace = 128  # number of time trace of waveform
     to_nsec = 4 * 1000
@@ -465,6 +566,7 @@ def parse_dst_file(
     add_shower_params=True,
     add_standard_recon=True,
     config=None,
+    use_grid_model=True,
 ):
     #  ntile - number of SD per one side
     dst_string = read_dst_file(dst_file)
@@ -485,7 +587,10 @@ def parse_dst_file(
     if add_standard_recon:
         data = standard_recon(data, dst_lists)
 
-    data = detector_readings(data, dst_lists, ntile, avg_traces)
+    if use_grid_model:
+        data = detector_readings(data, dst_lists, ntile, avg_traces)
+    else:
+        data = detector_readings_awkward(data, dst_lists, avg_traces)
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
