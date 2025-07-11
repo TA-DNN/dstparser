@@ -1,5 +1,6 @@
 import numpy as np
 import awkward as ak
+from typing import Union, Tuple
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
@@ -227,31 +228,55 @@ def standard_recon(data, dst_lists):
     return data
 
 
-def cut_events(event, wform):
-    # ! If the signal > 128 bins it is divided on parts with 128 in each
-    # ! The code below takes only first part (waveform) in case if
-    # ! the signal consists of several such parts
-    # Set all repeating elements to False, except first one
-    sdid = event[0]
-    u, c = np.unique(sdid, return_counts=True)
-    dup = u[c > 1]
-    mask = sdid == sdid
-    for el in dup:
-        mask[np.where(sdid == el)[0][1:]] = False
+def cut_events(
+    event: np.ndarray,
+    wform: np.ndarray,
+    max_hits: Union[int, str] = 1,
+    max_windows: Union[int, str] = 1,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    event:       shape (11, n_hits)
+    wform:       shape (>=3+128*n_windows, n_hits)
+    max_hits:     1 (default) or 'all'
+    max_windows:  1 (default), 2, 3, 4 or 'all'
+    """
+    # Step 1: Filter hits based on max_hits
+    if max_hits == 1:
+        # Keep only the first hit for each detector
+        sdid = event[0]
+        u, c = np.unique(sdid, return_counts=True)
+        dup = u[c > 1]
+        mask = np.ones(sdid.shape, dtype=bool)
+        for el in dup:
+            mask[np.where(sdid == el)[0][1:]] = False
+        event = event[:, mask]
 
-    event = event[:, mask]
-    # exclude coincidence signals
-    # the signal is a part of the event
+    # Exclude coincidence signals (where event[1] <= 2)
     event = event[:, event[1] > 2]
 
-    # Pick corresponding waveforms
+    # Step 2: Select corresponding waveforms
     wform_idx = []
+    wform_xxyy = wform[0, :].astype(np.int32)
     for xycoord in event[0].astype(np.int32):
-        # Take only the first waveform (second [0])
-        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
+        # Take only the first waveform for a given detector ID
+        idx = np.where(wform_xxyy == xycoord)[0]
+        if len(idx) > 0:
+            wform_idx.append(idx[0])
+    
+    wform = wform[:, wform_idx]
 
-    wform = wform[3:, wform_idx]
-    return event, wform
+    # Step 3: Filter windows based on max_windows
+    if max_windows != "all":
+        nfolds = event[11].astype(int)
+        windows_to_keep = np.minimum(nfolds, int(max_windows))
+
+        max_windows_to_keep = np.max(windows_to_keep) if len(windows_to_keep) > 0 else 0
+        num_fadc_rows = 128 * max_windows_to_keep
+        
+        # Keep metadata rows and FADC data
+        wform = wform[: 3 + num_fadc_rows, :]
+
+    return event, wform[3:, :]
 
 
 def center_tile(event, ntile):
@@ -363,7 +388,7 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
         hits_arrival_times = []
         hits_total_signals = []
         hits_time_traces = []
-        ttrace_counts = []
+        per_hit_ttrace_counts = []  # New: Counts for each hit's trace
     else:
         hits_arrival_times_low = []
         hits_arrival_times_up = []
@@ -371,24 +396,20 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
         hits_total_signals_up = []
         hits_time_traces_low = []
         hits_time_traces_up = []
-        ttrace_counts_low = []
-        ttrace_counts_up = []
+        per_hit_ttrace_counts_low = []  # New: Counts for each hit's trace (low)
+        per_hit_ttrace_counts_up = []   # New: Counts for each hit's trace (up)
 
     empty_events = []
 
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
-        event, wform = cut_events(event, wform)
+        event, wform = cut_events(event, wform, max_hits="all", max_windows="all")
 
         if event.shape[1] == 0:
             empty_events.append(ievt)
             hits_counts.append(0)
-            if avg_traces:
-                ttrace_counts.append(0)
-            else:
-                ttrace_counts_low.append(0)
-                ttrace_counts_up.append(0)
+            # No need to append to per_hit counts if there are no hits
             continue
 
         hits_counts.append(event.shape[1])
@@ -397,31 +418,39 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
 
         fadc_per_vem_low = event[9]
         fadc_per_vem_up = event[10]
+        nfolds = event[11].astype(int)
 
         if avg_traces:
             hits_arrival_times.extend((event[2] + event[3]) / 2 * to_nsec)
             hits_total_signals.extend((event[4] + event[5]) / 2)
             
-            ntime_trace = 128
-            ttrace = (
-                wform[:ntime_trace] / fadc_per_vem_low
-                + wform[ntime_trace:] / fadc_per_vem_up
-            ) / 2
-            hits_time_traces.extend(ttrace.flatten(order="F"))
-            ttrace_counts.extend([ntime_trace] * event.shape[1])
+            for i, nfold in enumerate(nfolds):
+                ntime_trace = 128 * nfold
+                wform_col = wform[:ntime_trace, i]
+                
+                ttrace_low = wform_col[::2] / fadc_per_vem_low[i]
+                ttrace_up = wform_col[1::2] / fadc_per_vem_up[i]
+                ttrace = (ttrace_low + ttrace_up) / 2
+                
+                hits_time_traces.extend(ttrace)
+                per_hit_ttrace_counts.append(len(ttrace))
         else:
             hits_arrival_times_low.extend(event[2] * to_nsec)
             hits_arrival_times_up.extend(event[3] * to_nsec)
             hits_total_signals_low.extend(event[4])
             hits_total_signals_up.extend(event[5])
 
-            ntime_trace = 128
-            ttrace_low = wform[:ntime_trace] / fadc_per_vem_low
-            ttrace_up = wform[ntime_trace:] / fadc_per_vem_up
-            hits_time_traces_low.extend(ttrace_low.flatten(order="F"))
-            hits_time_traces_up.extend(ttrace_up.flatten(order="F"))
-            ttrace_counts_low.extend([ntime_trace] * event.shape[1])
-            ttrace_counts_up.extend([ntime_trace] * event.shape[1])
+            for i, nfold in enumerate(nfolds):
+                ntime_trace = 128 * nfold
+                wform_col = wform[:ntime_trace, i]
+                
+                ttrace_low = wform_col[::2] / fadc_per_vem_low[i]
+                ttrace_up = wform_col[1::2] / fadc_per_vem_up[i]
+                
+                hits_time_traces_low.extend(ttrace_low)
+                hits_time_traces_up.extend(ttrace_up)
+                per_hit_ttrace_counts_low.append(len(ttrace_low))
+                per_hit_ttrace_counts_up.append(len(ttrace_up))
 
     # Remove empty events from per-event data
     if len(empty_events) != 0:
@@ -434,19 +463,26 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
     if avg_traces:
         data["hits_arrival_times"] = ak.unflatten(np.array(hits_arrival_times), hits_counts)
         data["hits_total_signals"] = ak.unflatten(np.array(hits_total_signals), hits_counts)
-        time_traces_flat = ak.unflatten(np.array(hits_time_traces), np.sum(ttrace_counts))
-        data["hits_time_traces"] = ak.unflatten(time_traces_flat, ttrace_counts)
+        
+        # Step 1: Unflatten flat trace data into per-hit traces
+        per_hit_traces = ak.unflatten(hits_time_traces, per_hit_ttrace_counts)
+        # Step 2: Group per-hit traces by event
+        data["hits_time_traces"] = ak.unflatten(per_hit_traces, hits_counts)
     else:
         data["hits_arrival_times_low"] = ak.unflatten(np.array(hits_arrival_times_low), hits_counts)
         data["hits_arrival_times_up"] = ak.unflatten(np.array(hits_arrival_times_up), hits_counts)
         data["hits_total_signals_low"] = ak.unflatten(np.array(hits_total_signals_low), hits_counts)
         data["hits_total_signals_up"] = ak.unflatten(np.array(hits_total_signals_up), hits_counts)
         
-        time_traces_low_flat = ak.Array(hits_time_traces_low)
-        data["hits_time_traces_low"] = ak.unflatten(time_traces_low_flat, ttrace_counts_low)
+        # Step 1 for 'low'
+        per_hit_traces_low = ak.unflatten(hits_time_traces_low, per_hit_ttrace_counts_low)
+        # Step 2 for 'low'
+        data["hits_time_traces_low"] = ak.unflatten(per_hit_traces_low, hits_counts)
         
-        time_traces_up_flat = ak.Array(hits_time_traces_up)
-        data["hits_time_traces_up"] = ak.unflatten(time_traces_up_flat, ttrace_counts_up)
+        # Step 1 for 'up'
+        per_hit_traces_up = ak.unflatten(hits_time_traces_up, per_hit_ttrace_counts_up)
+        # Step 2 for 'up'
+        data["hits_time_traces_up"] = ak.unflatten(per_hit_traces_up, hits_counts)
 
     return data
 
@@ -510,10 +546,13 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
             atimes = (event[2] + event[3]) / 2
             data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
 
-            ttrace = (
-                wform[:ntime_trace] / fadc_per_vem_low
-                + wform[ntime_trace:] / fadc_per_vem_up
-            ) / 2
+            ntime_trace = 128
+            ttrace_low = wform[:ntime_trace] / fadc_per_vem_low
+            if wform.shape[0] > ntime_trace:
+                ttrace_up = wform[ntime_trace:] / fadc_per_vem_up
+            else:
+                ttrace_up = np.zeros_like(ttrace_low)
+            ttrace = (ttrace_low + ttrace_up) / 2
             data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
 
             data["total_signals"][ievt, ixy[0], ixy[1]] = (
@@ -521,11 +560,13 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
             ) / 2
 
         else:
+            ntime_trace = 128
             ttrace = wform[:ntime_trace] / fadc_per_vem_low
             data["time_traces_low"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
 
-            ttrace = wform[ntime_trace:] / fadc_per_vem_up
-            data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+            if wform.shape[0] > ntime_trace:
+                ttrace = wform[ntime_trace:] / fadc_per_vem_up
+                data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
 
             data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
                 event[2][inside_tile] * to_nsec

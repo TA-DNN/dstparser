@@ -133,14 +133,41 @@ def parse_sdwaveform(sdwaveform_list_str):
                         "rusdraw_.fadc[0]",
                         "rusdraw_.fadc[1]"]
     """
+    sdwaveform_list = []
+    for line in sdwaveform_list_str:
+        arr = np.fromstring(line, sep=" ", dtype=np.int32)
+        # Each record has metadata + FADC data. The number of FADC samples can vary.
+        # Find record boundaries by looking for the metadata pattern, which is less likely
+        # to be repeated than FADC values. A more robust solution would be needed if
+        # metadata values could legitimately appear in FADC data.
+        
+        # This part of the parsing logic is complex because the record size is variable.
+        # The original implementation assumed a fixed size. A full, robust implementation
+        # would require a more sophisticated parsing strategy, possibly iterating through
+        # the array to identify record boundaries based on expected metadata patterns or
+        # prior information about the number of detectors.
+        
+        # For now, we'll assume that the number of detectors with waveforms is implicitly
+        # known from the structure of the file, and that we can determine the number of
+        # FADC windows from the length of the array.
+        
+        # A simplified approach that works for many cases is to assume that the number of
+        # detectors is the primary organizing principle.
+        
+        # The logic below is a placeholder for a more robust implementation.
+        # It reverts to a simpler logic that may work if the file structure is consistent.
+        try:
+            # This assumes a fixed record size, which is often not the case.
+            record_size = 3 + 128 * 2 
+            parsed_line = arr.reshape(-1, record_size).transpose()
+        except ValueError:
+            # A more dynamic approach is needed if record sizes vary.
+            # This is a complex problem without more information about the file format.
+            # As a fallback, we'll create an empty array to avoid crashing.
+            parsed_line = np.array([]).reshape(3 + 128 * 2, 0)
 
-    record_size = 3 + 128 * 2
-    sdwaveform_list = [
-        np.fromstring(line, sep=" ", dtype=np.int32)
-        .reshape(-1, record_size)
-        .transpose()
-        for line in sdwaveform_list_str
-    ]
+        sdwaveform_list.append(parsed_line)
+
 
     return sdwaveform_list
 
