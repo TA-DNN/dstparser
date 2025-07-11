@@ -484,7 +484,7 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
         # Step 2 for 'up'
         data["hits_time_traces_up"] = ak.unflatten(per_hit_traces_up, hits_counts)
 
-    return data
+    return data, empty_events
 
 
 def detector_readings(data, dst_lists, ntile, avg_traces):
@@ -561,12 +561,11 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
 
         else:
             ntime_trace = 128
-            ttrace = wform[:ntime_trace] / fadc_per_vem_low
-            data["time_traces_low"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
-
+            ttrace_low = wform[:ntime_trace] / fadc_per_vem_low
             if wform.shape[0] > ntime_trace:
-                ttrace = wform[ntime_trace:] / fadc_per_vem_up
-                data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+                ttrace_up = wform[ntime_trace:] / fadc_per_vem_up
+            else:
+                ttrace_up = np.zeros_like(ttrace_low)
 
             data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
                 event[2][inside_tile] * to_nsec
@@ -596,7 +595,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
     if len(empty_events) != 0:
         for key, value in data.items():
             data[key] = np.delete(value, empty_events, axis=0)
-    return data
+    return data, empty_events
 
 
 def parse_dst_file(
@@ -629,9 +628,22 @@ def parse_dst_file(
         data = standard_recon(data, dst_lists)
 
     if use_grid_model:
-        data = detector_readings(data, dst_lists, ntile, avg_traces)
+        data, empty_events = detector_readings(data, dst_lists, ntile, avg_traces)
     else:
-        data = detector_readings_awkward(data, dst_lists, avg_traces)
+        data, empty_events = detector_readings_awkward(data, dst_lists, avg_traces)
+
+    # Remove empty events
+    if len(empty_events) != 0:
+        for key, value in data.items():
+            if isinstance(value, ak.Array):
+                # For awkward arrays, we need to rebuild the array without the empty events
+                builder = ak.ArrayBuilder()
+                for i, event_data in enumerate(value):
+                    if i not in empty_events:
+                        builder.append(event_data)
+                data[key] = builder.snapshot()
+            else:
+                data[key] = np.delete(value, empty_events, axis=0)
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
