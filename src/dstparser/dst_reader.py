@@ -1,12 +1,13 @@
 import os
 from pathlib import Path
 import subprocess
-from dstparser.env_vars import changed_env_paths, is_alma_linux
+from dstparser.env_vars import changed_env_paths, is_alma_linux, is_rocky_linux
 from dstparser.paths import (
     root_dir,
     dst_reader_add_standard_recon,
     sd_analysis_env,
     openssl10_alma9,
+    openssl10_rocky_linux,
 )
 
 
@@ -19,6 +20,10 @@ for env_var, path_var in changed_env_paths(sd_analysis_env).items():
 if is_alma_linux():
     ld_paths = "LD_LIBRARY_PATH"
     os.environ[ld_paths] = f"{openssl10_alma9}:{os.environ[ld_paths]}"
+
+if is_rocky_linux():
+    ld_paths = "LD_LIBRARY_PATH"
+    os.environ[ld_paths] = f"{openssl10_rocky_linux}:{os.environ[ld_paths]}"
 
 
 def read_dst_file(dst_filename):
