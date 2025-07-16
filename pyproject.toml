@@ -20,6 +20,9 @@ dependencies = [
     "h5py",
     "tqdm",
     "matplotlib",
+    "torch",
+    "pyyaml",
+    "awkward"
 ]
 
 [project.optional-dependencies]

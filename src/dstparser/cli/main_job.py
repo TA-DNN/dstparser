@@ -2,12 +2,13 @@ import sys
 import json
 import time
 import argparse
-import numpy as np
+import yaml
 from pathlib import Path
 from collections import defaultdict
 from dstparser.cli.slurm import run_slurm_job
-from dstparser.cli.cli import parse_config
 import re
+import subprocess
+import os
 
 
 def find_files(dirs, globs):
@@ -76,28 +77,36 @@ def filter_files_by_date(files):
     return sorted(filtered_files)
 
 
-def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
-    slurm_settings = config.slurm_settings
-    slurm_settings["array"] = f"0-{max_jobs - 1}"
-
+def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config, config_path, local=False):
     script = Path(__file__).parent / "worker_job.py"
-
-    options = f"{str(db_file).strip()} {task_name} "
-    options += f"{str(Path(config.__file__)).strip()}"
-    log_dir = Path(log_dir)
-    print(f"Options = {options}")
-    run_slurm_job(
-        slurm_settings,
-        log_dir,
-        script,
-        options,
-        suffix="_worker_job",
-    )
+    options = f"{str(db_file).strip()} {task_name} {str(config_path).strip()}"
+    
+    if local:
+        for job_id in range(max_jobs):
+            env = os.environ.copy()
+            env["SLURM_ARRAY_TASK_ID"] = str(job_id)
+            env["SLURM_ARRAY_TASK_MIN"] = "0"
+            env["SLURM_ARRAY_TASK_MAX"] = str(max_jobs - 1)
+            command = [sys.executable, str(script)] + options.split()
+            print(f"Running worker job {job_id} locally: {' '.join(command)}")
+            subprocess.run(command, check=True, env=env)
+    else:
+        slurm_settings = config["slurm"]
+        slurm_settings["array"] = f"0-{max_jobs - 1}"
+        log_dir = Path(log_dir)
+        print(f"Options = {options}")
+        run_slurm_job(
+            slurm_settings,
+            log_dir,
+            script,
+            options,
+            suffix="_worker_job",
+        )
 
 
 def generate_db(config):
 
-    output_dir = Path(config.output_dir)
+    output_dir = Path(config["output"]["output_dir"])
     db_files = [output_dir / "jobs_pass1.json", output_dir / "jobs_pass2.json"]
 
     data_base = []
@@ -111,19 +120,32 @@ def generate_db(config):
 
     data_base = [None, None]
 
-    files = find_files(config.data_dirs, config.glob_patterns)
+    files = find_files(config["input"]["data_dirs"], config["input"]["glob_patterns"])
 
-    if hasattr(config, "filter_data_files"):
-        files = config.filter_data_files(files)
+    # if hasattr(config, "filter_data_files"):
+    #     files = config.filter_data_files(files)
 
     files = sorted(files, key=lambda x: x.name)
+
+    def temp_group_id(data_file, file_id, len_files):
+        pattern = r"DAT(\d{4})"
+        match = re.search(pattern, Path(data_file).name)
+        if match:
+            group_id = int(match.group(1))
+        else:
+            # Fallback if pattern doesn't match
+            group_id = file_id
+        return group_id
+
+    def temp_job_id(group_id):
+        return group_id % config["processing"]["njobs"]
 
     data_base[0] = distribute_files(
         files=files,
         output_pattern="temp_{:05}.h5",
         output_dir=output_dir / "temp_files",
-        assign_group_id=config.temp_group_id,
-        assign_job_id=config.temp_job_id,
+        assign_group_id=temp_group_id,
+        assign_job_id=temp_job_id,
     )
 
     print(f"data_base[0] = {len(data_base[0])}")
@@ -136,12 +158,25 @@ def generate_db(config):
 
     files = sorted(files, key=lambda x: x.name)
 
+    def final_group_id(data_file, file_id, len_files):
+        pattern = r"temp_(\d{5})"
+        match = re.search(pattern, Path(data_file).name)
+        if match:
+            group_id = int(match.group(1)) % config["processing"]["group_temp_files_by"]
+        else:
+            # Fallback if pattern doesn't match
+            group_id = file_id % config["processing"]["group_temp_files_by"]
+        return group_id
+
+    def final_job_id(group_id):
+        return group_id % config["processing"]["njobs"]
+
     data_base[1] = distribute_files(
         files=files,
-        output_pattern=config.file_name_pattern + "_{:03}.h5",
+        output_pattern=config["output"]["file_name_pattern"] + "_{:03}.h5",
         output_dir=output_dir / "final_files",
-        assign_group_id=config.final_group_id,
-        assign_job_id=config.final_job_id,
+        assign_group_id=final_group_id,
+        assign_job_id=final_job_id,
     )
 
     print(f"data_base[1] = {len(data_base[1])}")
@@ -192,7 +227,7 @@ def wait_until_ready(temp_files, log_dir):
     return all_ready
 
 
-def main_job(data_base, db_files, log_dir, config):
+def main_job(data_base, db_files, log_dir, config, config_path, local=False):
     # Find temp files
     temp_files = []
     for task in data_base[0].values():
@@ -215,6 +250,8 @@ def main_job(data_base, db_files, log_dir, config):
             task_name="parse_dst",
             log_dir=log_dir,
             config=config,
+            config_path=config_path,
+            local=local,
         )
 
     print("Wait unit ready")
@@ -228,6 +265,8 @@ def main_job(data_base, db_files, log_dir, config):
             task_name="join_hdf5",
             log_dir=log_dir,
             config=config,
+            config_path=config_path,
+            local=local,
         )
 
 
@@ -238,15 +277,25 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-c", "--configfile", type=str, help="Configuration file in python syntax"
+        "-c", "--config", type=str, help="Configuration file in YAML syntax"
     )
 
     parser.add_argument(
         "-l", "--log_dir", type=str, required=True, help="Directory for slurm output"
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Run the processing locally without submitting to SLURM.",
+    )
     args = parser.parse_args()
-    config = parse_config(args.configfile)
+    
+    config_path = Path(args.config)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found: {str(config_path)}")
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
 
     data_base, db_files = generate_db(config)
     print("Before main")
-    main_job(data_base, db_files, log_dir=args.log_dir, config=config)
+    main_job(data_base, db_files, log_dir=args.log_dir, config=config, config_path=config_path, local=args.local)

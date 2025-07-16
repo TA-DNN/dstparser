@@ -4,6 +4,8 @@ from dstparser.dst_parsers import parse_dst_string
 import dstparser.tasd_clf as tasd_clf
 import re
 from pathlib import Path
+import awkward as ak
+from typing import Union, Tuple
 
 
 def corsika_id2mass(corsika_pid):
@@ -226,45 +228,171 @@ def standard_recon(data, dst_lists):
     return data
 
 
-def cut_events(event, wform):
-    # ! If the signal > 128 bins it is divided on parts with 128 in each
-    # ! The code below takes only first part (waveform) in case if
-    # ! the signal consists of several such parts
-    # Set all repeating elements to False, except first one
+def detector_readings_awkward(data, dst_lists, avg_traces):
+    to_nsec = 4 * 1000
+    sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists[1:4]
 
+    hits_counts = []
+    hits_det_id = []
+    hits_nfold = []
+
+    if avg_traces:
+        hits_arrival_times = []
+        hits_total_signals = []
+        hits_time_traces = []
+        per_hit_ttrace_counts = []  # New: Counts for each hit's trace
+    else:
+        hits_arrival_times_low = []
+        hits_arrival_times_up = []
+        hits_total_signals_low = []
+        hits_total_signals_up = []
+        hits_time_traces_low = []
+        hits_time_traces_up = []
+        per_hit_ttrace_counts_low = []  # New: Counts for each hit's trace (low)
+        per_hit_ttrace_counts_up = []   # New: Counts for each hit's trace (up)
+
+    empty_events = []
+
+    for ievt, (event, wform, badsd) in enumerate(
+        zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
+    ):
+        event, wform = cut_events(event, wform, max_hits="all", max_windows="all")
+
+        if event.shape[1] == 0:
+            empty_events.append(ievt)
+            hits_counts.append(0)
+            # No need to append to per_hit counts if there are no hits
+            continue
+
+        hits_counts.append(event.shape[1])
+        hits_det_id.extend(event[0])
+        hits_nfold.extend(event[11])
+
+        fadc_per_vem_low = event[9]
+        fadc_per_vem_up = event[10]
+        nfolds = event[11].astype(int)
+
+        if avg_traces:
+            hits_arrival_times.extend((event[2] + event[3]) / 2 * to_nsec)
+            hits_total_signals.extend((event[4] + event[5]) / 2)
+            
+            for i, nfold in enumerate(nfolds):
+                ntime_trace = 128 * nfold
+                wform_col = wform[:ntime_trace, i]
+                
+                ttrace_low = wform_col[::2] / fadc_per_vem_low[i]
+                ttrace_up = wform_col[1::2] / fadc_per_vem_up[i]
+                ttrace = (ttrace_low + ttrace_up) / 2
+                
+                hits_time_traces.extend(ttrace)
+                per_hit_ttrace_counts.append(len(ttrace))
+        else:
+            hits_arrival_times_low.extend(event[2] * to_nsec)
+            hits_arrival_times_up.extend(event[3] * to_nsec)
+            hits_total_signals_low.extend(event[4])
+            hits_total_signals_up.extend(event[5])
+
+            for i, nfold in enumerate(nfolds):
+                ntime_trace = 128 * nfold
+                wform_col = wform[:ntime_trace, i]
+                
+                ttrace_low = wform_col[::2] / fadc_per_vem_low[i]
+                ttrace_up = wform_col[1::2] / fadc_per_vem_up[i]
+                
+                hits_time_traces_low.extend(ttrace_low)
+                hits_time_traces_up.extend(ttrace_up)
+                per_hit_ttrace_counts_low.append(len(ttrace_low))
+                per_hit_ttrace_counts_up.append(len(ttrace_up))
+
+    # Remove empty events from per-event data
+    if len(empty_events) != 0:
+        for key, value in data.items():
+            data[key] = np.delete(value, empty_events, axis=0)
+
+    data["hits_det_id"] = ak.unflatten(np.array(hits_det_id), hits_counts)
+    data["hits_nfold"] = ak.unflatten(np.array(hits_nfold), hits_counts)
+
+    if avg_traces:
+        data["hits_arrival_times"] = ak.unflatten(np.array(hits_arrival_times), hits_counts)
+        data["hits_total_signals"] = ak.unflatten(np.array(hits_total_signals), hits_counts)
+        
+        # Step 1: Unflatten flat trace data into per-hit traces
+        per_hit_traces = ak.unflatten(hits_time_traces, per_hit_ttrace_counts)
+        # Step 2: Group per-hit traces by event
+        data["hits_time_traces"] = ak.unflatten(per_hit_traces, hits_counts)
+    else:
+        data["hits_arrival_times_low"] = ak.unflatten(np.array(hits_arrival_times_low), hits_counts)
+        data["hits_arrival_times_up"] = ak.unflatten(np.array(hits_arrival_times_up), hits_counts)
+        data["hits_total_signals_low"] = ak.unflatten(np.array(hits_total_signals_low), hits_counts)
+        data["hits_total_signals_up"] = ak.unflatten(np.array(hits_total_signals_up), hits_counts)
+        
+        # Step 1 for 'low'
+        per_hit_traces_low = ak.unflatten(hits_time_traces_low, per_hit_ttrace_counts_low)
+        # Step 2 for 'low'
+        data["hits_time_traces_low"] = ak.unflatten(per_hit_traces_low, hits_counts)
+        
+        # Step 1 for 'up'
+        per_hit_traces_up = ak.unflatten(hits_time_traces_up, per_hit_ttrace_counts_up)
+        # Step 2 for 'up'
+        data["hits_time_traces_up"] = ak.unflatten(per_hit_traces_up, hits_counts)
+
+    return data, empty_events
+
+
+def cut_events(
+    event: np.ndarray,
+    wform: np.ndarray,
+    max_hits: Union[int, str] = 1,
+    max_windows: Union[int, str] = 1,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    event:       shape (11, n_hits)
+    wform:       shape (>=3+128*n_windows, n_hits)
+    max_hits:     1 (default) or 'all'
+    max_windows:  1 (default), 2, 3, 4 or 'all'
+    """
     # In TAx4, the SD ID is a 4-digit number, where the first two digits are
     # the y-coordinate and the last two digits are the x-coordinate.
     # We need to change from yyxx to xxyy format for further processing
     event[0, :] = ((event[0, :] % 100) * 100 + (event[0, :] // 100)).astype(np.int32)
     
-    # print("event shape:", event.shape)
-    
-    # for i, e in enumerate(event):
-    #     print(i, e)
+    # Step 1: Filter hits based on max_hits
+    if max_hits == 1:
+        # Keep only the first hit for each detector
+        sdid = event[0]
+        u, c = np.unique(sdid, return_counts=True)
+        dup = u[c > 1]
+        mask = np.ones(sdid.shape, dtype=bool)
+        for el in dup:
+            mask[np.where(sdid == el)[0][1:]] = False
+        event = event[:, mask]
 
-    sdid = event[0]
-    u, c = np.unique(sdid, return_counts=True)
-    dup = u[c > 1]
-    mask = sdid == sdid
-    
-    # print(f"duplicate SD IDs: {dup}")
-    
-    for el in dup:
-        mask[np.where(sdid == el)[0][1:]] = False
-
-    event = event[:, mask]
-    # exclude coincidence signals
-    # the signal is a part of the event
+    # Exclude coincidence signals (where event[1] <= 2)
     event = event[:, event[1] > 2]
 
-    # Pick corresponding waveforms
+    # Step 2: Select corresponding waveforms
     wform_idx = []
+    wform_xxyy = wform[0, :].astype(np.int32)
     for xycoord in event[0].astype(np.int32):
-        # Take only the first waveform (second [0])
-        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
+        # Take only the first waveform for a given detector ID
+        idx = np.where(wform_xxyy == xycoord)[0]
+        if len(idx) > 0:
+            wform_idx.append(idx[0])
+    
+    wform = wform[:, wform_idx]
 
-    wform = wform[3:, wform_idx]
-    return event, wform
+    # Step 3: Filter windows based on max_windows
+    if max_windows != "all":
+        nfolds = event[11].astype(int)
+        windows_to_keep = np.minimum(nfolds, int(max_windows))
+
+        max_windows_to_keep = np.max(windows_to_keep) if len(windows_to_keep) > 0 else 0
+        num_fadc_rows = 128 * max_windows_to_keep
+        
+        # Keep metadata rows and FADC data
+        wform = wform[: 3 + num_fadc_rows, :]
+
+    return event, wform[3:, :]
 
 
 def center_tile(event, ntile):
@@ -504,6 +632,7 @@ def parse_dst_file_tax4(
     add_shower_params=True,
     add_standard_recon=True,
     config=None,
+    use_grid_model=True,
 ):
     #  ntile - number of SD per one side
     dst_string = read_dst_file(dst_file)
@@ -524,8 +653,28 @@ def parse_dst_file_tax4(
     if add_standard_recon:
         data = standard_recon(data, dst_lists)
 
-    data = detector_readings(data, dst_lists, ntile, avg_traces)
+    if use_grid_model:
+        data, empty_events = detector_readings(data, dst_lists, ntile, avg_traces)
+    else:
+        data, empty_events = detector_readings_awkward(data, dst_lists, avg_traces)
 
-    if (config is not None) and (hasattr(config, "add_event_ids")):
-        data = config.add_event_ids(data, dst_file)
+    # Remove empty events
+    if len(empty_events) != 0:
+        for key, value in data.items():
+            if isinstance(value, ak.Array):
+                # For awkward arrays, we need to rebuild the array without the empty events
+                builder = ak.ArrayBuilder()
+                for i, event_data in enumerate(value):
+                    if i not in empty_events:
+                        builder.append(event_data)
+                data[key] = builder.snapshot()
+            else:
+                data[key] = np.delete(value, empty_events, axis=0)
+
+    if (config is not None) and ("add_event_ids" in config.get("processing", {})):
+        # Dynamically load and call the event ID function
+        module_path, func_name = config["processing"]["add_event_ids"].rsplit('.', 1)
+        module = importlib.import_module(module_path)
+        func = getattr(module, func_name)
+        data = func(data, dst_file)
     return data

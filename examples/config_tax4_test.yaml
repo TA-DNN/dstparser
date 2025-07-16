@@ -1,0 +1,39 @@
+# dataset_mapping: maps file-root paths to numeric IDs
+dataset_mapping:
+  /ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124: 10010001
+
+# slurm_settings: job-submission defaults
+slurm:
+  job-name: tax4_test
+  array: "0"
+  ntasks: 1
+  mem: "2gb"
+  cpus-per-task: 1
+  partition: edr1_short
+  time: 00:10:00
+
+# input: where to find DST files
+input:
+  data_dirs:
+    - /ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124
+  glob_patterns: DAT000025_gea.rufldf.dst.gz
+
+# dst_parser: parameters for parse_dst_file
+dst_parser:
+  ntile: 7
+  xmax_reader: null
+  avg_traces: false
+  add_shower_params: true
+  add_standard_recon: true
+  use_grid_model: false
+  data_type: TAX4
+
+# output: naming & destination
+output:
+  file_name_pattern: tax4_output
+  output_dir: /home/marktsai321/TA_DNN/outputs/tax4_test_output
+
+# processing: parameters for job distribution
+processing:
+  njobs: 1
+  group_temp_files_by: 1

@@ -1,0 +1,45 @@
+# dataset_mapping: maps file-root paths to numeric IDs (was in config_dst.py)
+dataset_mapping:
+  /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo: 10010001
+  /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii03proton/080511_230511/noCuts_HiResSpectrum: 10010002
+  /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04helium/080417_160603/Em1_bsdinfo: 10040001
+  /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo: 10140001
+  /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo: 10560001
+  /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii03iron/6yrs: 10560002
+
+# slurm_settings: job-submission defaults (was in config_dst.py)
+slurm:
+  job-name: procsh1
+  array: "0"
+  ntasks: 1
+  mem: "20gb"
+  cpus-per-task: 1
+  partition: edr1_short
+  time: 02:00:00
+
+# input: where to find DST files (was in config_dst.py)
+input:
+  data_set_root: /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/
+  data_dirs:
+    - /ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii03proton/080511_230511/noCuts_HiResSpectrum
+  glob_patterns: DAT*dst.gz
+
+# dst_parser: parameters for parse_dst_file (new)
+dst_parser:
+  ntile: 7
+  xmax_reader: null
+  avg_traces: false
+  add_shower_params: true
+  add_standard_recon: true
+  use_grid_model: true
+  data_type: TAX4   # “TA” or “TAX4”
+
+# output: naming & destination (was in config_dst.py)
+output:
+  file_name_pattern: final
+  output_dir: /ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/12/qgsii03_std/prot/
+
+# processing: parameters for job distribution
+processing:
+  njobs: 50
+  group_temp_files_by: 50

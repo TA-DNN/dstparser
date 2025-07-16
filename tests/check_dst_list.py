@@ -3,11 +3,11 @@ from time import time
 import sys
 import itertools
 import awkward as ak
+import yaml
 
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers import parse_dst_string
 from dstparser import parse_dst_file
-from dstparser.cli.cli import parse_config
 
 
 def get_ak_shape(t):
@@ -42,12 +42,10 @@ def get_concrete_shape(arr):
         return ()
 
 
-def check_dst_list(dst_file, print_read_data=False):
+def check_dst_list(dst_file, config_path, print_read_data=False):
     # Load config if provided
-    if len(sys.argv) > 1:
-        config = parse_config(sys.argv[1])
-    else:
-        config = None
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
 
     if print_read_data:
         # Inspect raw DST sections once, as they are independent of parser params
@@ -94,18 +92,20 @@ def check_dst_list(dst_file, print_read_data=False):
             f"Testing with: use_grid_model={use_grid_model}, avg_traces={avg_traces}, "
             f"add_shower_params={add_shower_params}, add_standard_recon={add_standard_recon}"
         )
+        
+        current_config = config.copy()
+        current_config['dst_parser']['use_grid_model'] = use_grid_model
+        current_config['dst_parser']['avg_traces'] = avg_traces
+        current_config['dst_parser']['add_shower_params'] = add_shower_params
+        current_config['dst_parser']['add_standard_recon'] = add_standard_recon
+
 
         # Parse DST into structured data dict
         start = time()
         data = parse_dst_file(
             dst_file,
-            ntile=7,
-            xmax_reader=None,
-            avg_traces=avg_traces,
-            add_shower_params=add_shower_params,
-            add_standard_recon=add_standard_recon,
-            config=config,
-            use_grid_model=use_grid_model,
+            **current_config["dst_parser"],
+            config=current_config,
         )
         end = time()
         print(f"Parse time: {end - start:.3f} sec")
@@ -149,9 +149,11 @@ def check_dst_list(dst_file, print_read_data=False):
 
 
 if __name__ == "__main__":
-    dst_file = (
-        "/ceph/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/"
-        "tasdmc_SIBYLL_fe/p2/"
-        "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
-    )
-    check_dst_list(dst_file, print_read_data=True)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("dst_file", help="DST file to process")
+    parser.add_argument("config_file", help="YAML config file")
+    parser.add_argument("--print", action="store_true", help="Print detailed data info")
+    args = parser.parse_args()
+
+    check_dst_list(args.dst_file, args.config_file, print_read_data=args.print)

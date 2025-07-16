@@ -1,0 +1,39 @@
+# dataset_mapping: maps file-root paths to numeric IDs
+dataset_mapping:
+  /ceph/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2: 10010001
+
+# slurm_settings: job-submission defaults
+slurm:
+  job-name: ta_test
+  array: "0"
+  ntasks: 1
+  mem: "2gb"
+  cpus-per-task: 1
+  partition: edr1_short
+  time: 00:10:00
+
+# input: where to find DST files
+input:
+  data_dirs:
+    - /ceph/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2
+  glob_patterns: DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz
+
+# dst_parser: parameters for parse_dst_file
+dst_parser:
+  ntile: 7
+  xmax_reader: null
+  avg_traces: false
+  add_shower_params: true
+  add_standard_recon: true
+  use_grid_model: true
+  data_type: TA
+
+# output: naming & destination
+output:
+  file_name_pattern: ta_output
+  output_dir: /home/marktsai321/TA_DNN/outputs/ta_test_output
+
+# processing: parameters for job distribution
+processing:
+  njobs: 1
+  group_temp_files_by: 1

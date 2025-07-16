@@ -19,7 +19,7 @@ def copy_files(src_paths, dest_dir):
         else:
             files = [path]
         for file in files:
-            print(files, str(dest_dir / file.name))
+            print(f"Copying {file} to {dest_dir / file.name}")
             shutil.copyfile(file, str(dest_dir / file.name))
 
 

@@ -1,6 +1,6 @@
 import sys
 import json
-import numpy as np
+import yaml
 from tqdm.auto import tqdm
 from pathlib import Path
 from dstparser import parse_dst_file
@@ -8,7 +8,6 @@ from dstparser.xmax_reader import XmaxReader
 from dstparser.cli.io import read_h5, save2hdf5
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
-from dstparser.cli.cli import parse_config
 
 
 def process_files(task_function, config):
@@ -58,11 +57,7 @@ def dst_to_hdf5(ifiles, ofile, config):
 
         data = parse_dst_file(
             file,
-            ntile=7,
-            xmax_reader=xmax_reader,
-            avg_traces=False,
-            add_shower_params=True,
-            add_standard_recon=True,
+            **config["dst_parser"],
             config=config,
         )
 
@@ -103,7 +98,9 @@ def join_hdf5(ifiles, ofile, config):
 
 def worker_job():
 
-    config = parse_config(sys.argv[3])
+    config_path = sys.argv[3]
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
 
     if sys.argv[2] == "parse_dst":
         process_files(dst_to_hdf5, config)

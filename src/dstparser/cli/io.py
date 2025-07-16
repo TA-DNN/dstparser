@@ -131,7 +131,10 @@ def save2hdf5(
             for key, value in acc_data.items():
 
                 if isinstance(value, list):
-                    value = np.concatenate(value, axis=0)
+                    if isinstance(value[0], np.ndarray):
+                        value = np.concatenate(value, axis=0)
+                    else:  # Awkward arrays
+                        value = np.array(value, dtype=object)
 
                 if isinstance(value, np.ndarray) and np.issubdtype(
                     value.dtype, np.floating
