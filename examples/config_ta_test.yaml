@@ -25,13 +25,13 @@ dst_parser:
   avg_traces: false
   add_shower_params: true
   add_standard_recon: true
-  use_grid_model: true
+  use_grid_model: false
   data_type: TA
 
 # output: naming & destination
 output:
   file_name_pattern: ta_output
-  output_dir: /home/marktsai321/TA_DNN/outputs/ta_test_output
+  output_dir: /home/marktsai321/TA_DNN/outputs/2025/07/17/check_dst_list_output
 
 # processing: parameters for job distribution
 processing:

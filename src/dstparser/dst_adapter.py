@@ -235,65 +235,79 @@ def cut_events(
     max_windows: Union[int, str] = 1,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    event:       shape (11, n_hits)
-    wform:       shape (>=3+256*n_windows, n_hits)
-    max_hits:     1 (default) or 'all'
-    max_windows:  1 (default), 2, 3, 4 or 'all'
+    Filters and aligns event and waveform data.
+
+    event:       shape (12, n_hits)
+    wform:       shape (>=3+256*n_windows, n_wforms)
+    max_hits:    'all' or 1 (keep only first hit per unique detector)
+    max_windows: 'all' or integer (max number of FADC windows per hit)
     """
     # Step 1: Exclude coincidence signals (where event[1] <= 2)
     coincidence_mask = event[1] > 2
     event = event[:, coincidence_mask]
-    
-    # The wform array contains columns for each FADC window. A single hit can have
-    # multiple windows. The detector ID is in the first row of wform.
-    # We need to select the wform columns that correspond to the hits that were not filtered out.
-    wform_xxyy = wform[0, :].astype(np.int32)
-    event_xxyy = event[0, :].astype(np.int32)
-    wform_mask = np.isin(wform_xxyy, event_xxyy)
-    wform = wform[:, wform_mask]
-    
-    # After filtering wform, we need to use the filtered IDs for reordering
-    wform_xxyy_filtered = wform[0, :].astype(np.int32)
+    if event.shape[1] == 0:
+        return event, np.empty((wform.shape[0] - 3, 0), dtype=wform.dtype)
 
-    # Step 2: Reorder wform to match the order of event hits
-    # This is critical to ensure that event metadata (like nfold) matches the correct waveform.
-    ordered_wform_indices = []
-    for hit_id in event_xxyy:
-        # Find all waveform columns for the current hit_id in the *filtered* wform
-        indices = np.where(wform_xxyy_filtered == hit_id)[0]
-        if len(indices) > 0:
-            ordered_wform_indices.extend(indices)
-    
-    # This reorders the waveform columns to align with the event columns
-    wform = wform[:, ordered_wform_indices]
-
-    # Step 3: Filter hits based on max_hits
+    # Step 2: Filter hits based on max_hits
     if max_hits == 1:
         # Keep only the first hit for each unique detector
         sdid = event[0]
         _, first_indices = np.unique(sdid, return_index=True)
-        
-        # Create a mask to keep only the first occurrences
-        mask = np.zeros(sdid.shape, dtype=bool)
-        mask[first_indices] = True
-        
-        event = event[:, mask]
-        # Also filter the corresponding waveforms
-        wform = wform[:, mask]
+        event = event[:, first_indices]
 
+    # `event` is now the final set of hits.
+    # Step 3: Filter and order wform to match the final event array.
+    
+    wform_xxyy = wform[0, :].astype(np.int32)
+    event_xxyy = event[0, :].astype(np.int32)
+    
+    # Find all waveform columns that correspond to our final set of hits
+    wform_mask = np.isin(wform_xxyy, event_xxyy)
+    wform = wform[:, wform_mask]
+    wform_xxyy_filtered = wform[0, :].astype(np.int32)
+
+    # Reorder the waveform columns to match the order of hits in the event array
+    ordered_wform_indices = []
+    for hit_id in event_xxyy:
+        indices = np.where(wform_xxyy_filtered == hit_id)[0]
+        if len(indices) > 0:
+            ordered_wform_indices.extend(indices)
+    wform = wform[:, ordered_wform_indices]
 
     # Step 4: Filter windows based on max_windows
-    if max_windows != "all":
-        nfolds = event[11].astype(int)
-        windows_to_keep = np.minimum(nfolds, int(max_windows))
+    if max_windows != 'all':
+        # This logic ensures we only keep the specified number of windows for each hit.
+        wform_col_mask = []
+        # Get the actual number of waveform columns for each hit after filtering
+        unique_ids, counts = np.unique(wform[0, :].astype(np.int32), return_counts=True)
+        wform_nfolds = dict(zip(unique_ids, counts))
 
-        max_windows_to_keep = np.max(windows_to_keep) if len(windows_to_keep) > 0 else 0
-        # Each window has 128 FADC samples, but since it's interleaved (up/low),
-        # the actual number of rows for FADC data is 256 per window.
-        num_fadc_rows = 256 * max_windows_to_keep
-        
-        # Keep metadata rows and FADC data
-        wform = wform[: 3 + num_fadc_rows, :]
+        # Map event hit IDs to the number of windows we should keep
+        windows_to_keep = np.minimum(event[11].astype(int), int(max_windows))
+        event_id_to_windows = dict(zip(event[0].astype(np.int32), windows_to_keep))
+
+        # Iterate and build the final mask for wform columns
+        current_counts = {hit_id: 0 for hit_id in event_id_to_windows}
+        for hit_id in wform[0, :].astype(np.int32):
+            if current_counts[hit_id] < event_id_to_windows[hit_id]:
+                wform_col_mask.append(True)
+                current_counts[hit_id] += 1
+            else:
+                wform_col_mask.append(False)
+        wform = wform[:, wform_col_mask]
+
+    # Step 5: Adjust number of FADC rows based on the windows we actually kept
+    max_windows_actually_kept = 1
+    if wform.shape[1] > 0:
+        if max_windows == 'all':
+            event_mask_with_wform = np.isin(event[0], np.unique(wform[0, :].astype(np.int32)))
+            if np.any(event_mask_with_wform):
+                 max_windows_actually_kept = np.max(event[11, event_mask_with_wform].astype(int))
+        else:
+            max_windows_actually_kept = int(max_windows)
+
+    num_fadc_rows = 256 * max_windows_actually_kept
+    wform = wform[: 3 + num_fadc_rows, :]
 
     return event, wform[3:, :]
 
@@ -423,7 +437,7 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
     for ievt, (event, wform, badsd) in enumerate(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
-        event, wform = cut_events(event, wform, max_hits="all", max_windows="all")
+        event, wform_data = cut_events(event, wform, max_hits="all", max_windows="all")
 
         if event.shape[1] == 0:
             empty_events.append(ievt)
@@ -450,10 +464,10 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
                 start_col = wform_starts[i]
                 end_col = start_col + nfold
                 # Select all window columns for this hit and flatten them
-                wform_chunk = wform[:, start_col:end_col].T.flatten()
+                wform_chunk = wform_data[:, start_col:end_col].T.flatten()
 
                 # The waveform is interleaved, so we need to de-interleave it
-                ttrace_up = wform_chunk[::2] 
+                ttrace_up = wform_chunk[::2]
                 ttrace_low = wform_chunk[1::2]
                 
                 ttrace_low = ttrace_low / fadc_per_vem_low[i]
@@ -472,7 +486,7 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
                 start_col = wform_starts[i]
                 end_col = start_col + nfold
                 # Select all window columns for this hit and flatten them
-                wform_chunk = wform[:, start_col:end_col].T.flatten()
+                wform_chunk = wform_data[:, start_col:end_col].T.flatten()
                 
                 ttrace_up = wform_chunk[::2]
                 ttrace_low = wform_chunk[1::2]
@@ -554,61 +568,55 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
         # event.shape = (11, number of detectors)
-        event, wform = cut_events(event, wform)
+        event, wform_data = cut_events(event, wform, max_hits=1, max_windows=1)
 
         if event.shape[1] == 0:
             empty_events.append(ievt)
             continue
 
         ixy0, inside_tile, ixy = center_tile(event, ntile)
+
+        # Filter event and waveform data to include only what's inside the tile
+        event_in_tile = event[:, inside_tile]
+        wform_in_tile = wform_data[:, inside_tile]
+        ixy_in_tile = ixy
+
         # Populate absolute detector positions and states
         data = tile_positions(ixy0, ntile, badsd, data, ievt)
         # Shift and normalize detector positions and shower cores
         data = tile_normalization(data, ievt)
 
-        # Populate detector readings and arrival times
-        wform = wform[:, inside_tile]
-        fadc_per_vem_low = event[9][inside_tile]
-        fadc_per_vem_up = event[10][inside_tile]
+        # Populate detector readings for the hits inside the tile
+        if event_in_tile.shape[1] > 0:
+            fadc_per_vem_low = event_in_tile[9]
+            fadc_per_vem_up = event_in_tile[10]
 
-        # foldedness of the hit (over how many 128 fadc widnows this signal extends)
-        # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is 3.
-        data["nfold"][ievt, ixy[0], ixy[1]] = event[11][inside_tile]
+            # foldedness of the hit
+            data["nfold"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = event_in_tile[11]
 
-        if avg_traces:
-            atimes = (event[2] + event[3]) / 2
-            data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
+            # De-interleave and calibrate traces
+            ttrace_low = wform_in_tile[:ntime_trace] / fadc_per_vem_low
+            ttrace_up = wform_in_tile[ntime_trace:] / fadc_per_vem_up
 
-            ntime_trace = 128
-            ttrace_low = wform[:ntime_trace] / fadc_per_vem_low
-            if wform.shape[0] > ntime_trace:
-                ttrace_up = wform[ntime_trace:] / fadc_per_vem_up
+            if avg_traces:
+                atimes = (event_in_tile[2] + event_in_tile[3]) / 2
+                data["arrival_times"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = atimes * to_nsec
+                
+                ttrace = (ttrace_low + ttrace_up) / 2
+                data["time_traces"][ievt, ixy_in_tile[0], ixy_in_tile[1], :] = ttrace.transpose()
+
+                data["total_signals"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = (
+                    event_in_tile[4] + event_in_tile[5]
+                ) / 2
             else:
-                ttrace_up = np.zeros_like(ttrace_low)
-            ttrace = (ttrace_low + ttrace_up) / 2
-            data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+                data["arrival_times_low"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = event_in_tile[2] * to_nsec
+                data["arrival_times_up"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = event_in_tile[3] * to_nsec
+                
+                data["time_traces_low"][ievt, ixy_in_tile[0], ixy_in_tile[1], :] = ttrace_low.transpose()
+                data["time_traces_up"][ievt, ixy_in_tile[0], ixy_in_tile[1], :] = ttrace_up.transpose()
 
-            data["total_signals"][ievt, ixy[0], ixy[1]] = (
-                event[4][inside_tile] + event[5][inside_tile]
-            ) / 2
-
-        else:
-            ntime_trace = 128
-            ttrace_low = wform[:ntime_trace] / fadc_per_vem_low
-            if wform.shape[0] > ntime_trace:
-                ttrace_up = wform[ntime_trace:] / fadc_per_vem_up
-            else:
-                ttrace_up = np.zeros_like(ttrace_low)
-
-            data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
-                event[2][inside_tile] * to_nsec
-            )
-            data["arrival_times_up"][ievt, ixy[0], ixy[1]] = (
-                event[3][inside_tile] * to_nsec
-            )
-
-            data["total_signals_low"][ievt, ixy[0], ixy[1]] = event[4][inside_tile]
-            data["total_signals_up"][ievt, ixy[0], ixy[1]] = event[5][inside_tile]
+                data["total_signals_low"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = event_in_tile[4]
+                data["total_signals_up"][ievt, ixy_in_tile[0], ixy_in_tile[1]] = event_in_tile[5]
 
         if avg_traces:
             data["arrival_times"][ievt, :, :] = np.where(
