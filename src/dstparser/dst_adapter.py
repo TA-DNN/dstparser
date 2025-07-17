@@ -236,42 +236,61 @@ def cut_events(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     event:       shape (11, n_hits)
-    wform:       shape (>=3+128*n_windows, n_hits)
+    wform:       shape (>=3+256*n_windows, n_hits)
     max_hits:     1 (default) or 'all'
     max_windows:  1 (default), 2, 3, 4 or 'all'
     """
-    # Step 1: Filter hits based on max_hits
-    if max_hits == 1:
-        # Keep only the first hit for each detector
-        sdid = event[0]
-        u, c = np.unique(sdid, return_counts=True)
-        dup = u[c > 1]
-        mask = np.ones(sdid.shape, dtype=bool)
-        for el in dup:
-            mask[np.where(sdid == el)[0][1:]] = False
-        event = event[:, mask]
-
-    # Exclude coincidence signals (where event[1] <= 2)
-    event = event[:, event[1] > 2]
-
-    # Step 2: Select corresponding waveforms
-    wform_idx = []
-    wform_xxyy = wform[0, :].astype(np.int32)
-    for xycoord in event[0].astype(np.int32):
-        # Take only the first waveform for a given detector ID
-        idx = np.where(wform_xxyy == xycoord)[0]
-        if len(idx) > 0:
-            wform_idx.append(idx[0])
+    # Step 1: Exclude coincidence signals (where event[1] <= 2)
+    coincidence_mask = event[1] > 2
+    event = event[:, coincidence_mask]
     
-    wform = wform[:, wform_idx]
+    # The wform array contains columns for each FADC window. A single hit can have
+    # multiple windows. The detector ID is in the first row of wform.
+    # We need to select the wform columns that correspond to the hits that were not filtered out.
+    wform_xxyy = wform[0, :].astype(np.int32)
+    event_xxyy = event[0, :].astype(np.int32)
+    wform_mask = np.isin(wform_xxyy, event_xxyy)
+    wform = wform[:, wform_mask]
+    
+    # After filtering wform, we need to use the filtered IDs for reordering
+    wform_xxyy_filtered = wform[0, :].astype(np.int32)
 
-    # Step 3: Filter windows based on max_windows
+    # Step 2: Reorder wform to match the order of event hits
+    # This is critical to ensure that event metadata (like nfold) matches the correct waveform.
+    ordered_wform_indices = []
+    for hit_id in event_xxyy:
+        # Find all waveform columns for the current hit_id in the *filtered* wform
+        indices = np.where(wform_xxyy_filtered == hit_id)[0]
+        if len(indices) > 0:
+            ordered_wform_indices.extend(indices)
+    
+    # This reorders the waveform columns to align with the event columns
+    wform = wform[:, ordered_wform_indices]
+
+    # Step 3: Filter hits based on max_hits
+    if max_hits == 1:
+        # Keep only the first hit for each unique detector
+        sdid = event[0]
+        _, first_indices = np.unique(sdid, return_index=True)
+        
+        # Create a mask to keep only the first occurrences
+        mask = np.zeros(sdid.shape, dtype=bool)
+        mask[first_indices] = True
+        
+        event = event[:, mask]
+        # Also filter the corresponding waveforms
+        wform = wform[:, mask]
+
+
+    # Step 4: Filter windows based on max_windows
     if max_windows != "all":
         nfolds = event[11].astype(int)
         windows_to_keep = np.minimum(nfolds, int(max_windows))
 
         max_windows_to_keep = np.max(windows_to_keep) if len(windows_to_keep) > 0 else 0
-        num_fadc_rows = 128 * max_windows_to_keep
+        # Each window has 128 FADC samples, but since it's interleaved (up/low),
+        # the actual number of rows for FADC data is 256 per window.
+        num_fadc_rows = 256 * max_windows_to_keep
         
         # Keep metadata rows and FADC data
         wform = wform[: 3 + num_fadc_rows, :]
@@ -420,16 +439,25 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
         fadc_per_vem_up = event[10]
         nfolds = event[11].astype(int)
 
+        # Create a mapping from hit index to the start of its waveforms in the flattened wform array
+        wform_starts = np.concatenate(([0], np.cumsum(nfolds[:-1])))
+
         if avg_traces:
             hits_arrival_times.extend((event[2] + event[3]) / 2 * to_nsec)
             hits_total_signals.extend((event[4] + event[5]) / 2)
             
             for i, nfold in enumerate(nfolds):
-                ntime_trace = 128 * nfold
-                wform_col = wform[:ntime_trace, i]
+                start_col = wform_starts[i]
+                end_col = start_col + nfold
+                # Select all window columns for this hit and flatten them
+                wform_chunk = wform[:, start_col:end_col].T.flatten()
+
+                # The waveform is interleaved, so we need to de-interleave it
+                ttrace_up = wform_chunk[::2] 
+                ttrace_low = wform_chunk[1::2]
                 
-                ttrace_low = wform_col[::2] / fadc_per_vem_low[i]
-                ttrace_up = wform_col[1::2] / fadc_per_vem_up[i]
+                ttrace_low = ttrace_low / fadc_per_vem_low[i]
+                ttrace_up = ttrace_up / fadc_per_vem_up[i]
                 ttrace = (ttrace_low + ttrace_up) / 2
                 
                 hits_time_traces.extend(ttrace)
@@ -441,11 +469,16 @@ def detector_readings_awkward(data, dst_lists, avg_traces):
             hits_total_signals_up.extend(event[5])
 
             for i, nfold in enumerate(nfolds):
-                ntime_trace = 128 * nfold
-                wform_col = wform[:ntime_trace, i]
+                start_col = wform_starts[i]
+                end_col = start_col + nfold
+                # Select all window columns for this hit and flatten them
+                wform_chunk = wform[:, start_col:end_col].T.flatten()
                 
-                ttrace_low = wform_col[::2] / fadc_per_vem_low[i]
-                ttrace_up = wform_col[1::2] / fadc_per_vem_up[i]
+                ttrace_up = wform_chunk[::2]
+                ttrace_low = wform_chunk[1::2]
+
+                ttrace_low = ttrace_low / fadc_per_vem_low[i]
+                ttrace_up = ttrace_up / fadc_per_vem_up[i]
                 
                 hits_time_traces_low.extend(ttrace_low)
                 hits_time_traces_up.extend(ttrace_up)
