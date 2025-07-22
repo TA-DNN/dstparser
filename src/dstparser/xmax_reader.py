@@ -2,6 +2,7 @@ import numpy as np
 import re
 from pathlib import Path
 from dstparser.read_data import data_files
+import warnings
 
 
 # Taken from https://astro.pages.rwth-aachen.de/astrotools/_modules/auger.html#mean_xmax
@@ -29,6 +30,28 @@ DXMAX_PARAMS = {
 }
 
 
+def std_ta_energy_grid():
+    """Return standard TA energy grid (mids and edges) in EeV."""
+    # Define 26 energy bins in EeV
+    # from 10^18 eV to 10^20.5 eV
+    # with 0.5 log10 step
+    mids = np.linspace(18, 20.5, 26)
+    res = {"mids": 10 ** (mids - 18)}
+
+    widths = mids[1:] - mids[:-1]
+    left_edge = mids[0:1] - widths[0:1] / 2
+    right_edge = mids[-1:] + widths[-1:] / 2
+    # Edges of the bins
+    edges = np.concatenate([left_edge, mids[:-1] + widths / 2, right_edge])
+    calc_mids = (edges[1:] + edges[:-1]) / 2
+    assert np.allclose(
+        calc_mids, mids
+    ), "Calculated midpoints do not match expected midpoints"
+    res["edges"] = 10 ** (edges - 18)
+
+    return res
+
+
 class XmaxReader:
     def __init__(self, xmax_data_dir, xmax_data_files, model="QGSJetII-04"):
 
@@ -42,6 +65,12 @@ class XmaxReader:
 
         file_idx = []
         all_xmax = []
+
+        # Ignore warning from numpy.loadtxt
+        warnings.filterwarnings(
+            "ignore", "Input line 1 contained no data and will not be counted"
+        )
+
         for dst_file in xmax_files:
             try:
                 nfile, nevents, zenith_angle, xmax = np.loadtxt(
@@ -61,8 +90,7 @@ class XmaxReader:
         self.file_idxs = np.concatenate(file_idx)
         self.all_xmax = np.concatenate(all_xmax)
 
-        # Energy bins in EeV
-        self.en_bins = np.geomspace(1, 1000, 31)
+        self.energy_bin_centers = std_ta_energy_grid()["mids"]
 
     def _extract_idx(self, file_name):
         pattern = r"DAT(\d+)_"
@@ -75,23 +103,28 @@ class XmaxReader:
     def read_file(self, file_name):
         if self.empty:
             self._xmax0 = None
-            self._en0 = None
+            self._en_bin_center = None
             return
 
         file_name = Path(file_name)
         file_idx = self._extract_idx(file_name)
-        en0 = self.en_bins[int(file_idx[-2:])]
+        # Get energy at the bin center
+        en_bin_center = self.energy_bin_centers[int(file_idx[-2:])]
+
+        # xmax0 is the xmax value for the energy at the bin center
         try:
             xmax0 = self.all_xmax[np.where(self.file_idxs == file_idx)[0]][0]
         except Exception:
             xmax0 = None
 
         self._xmax0 = xmax0
-        self._en0 = en0
+        self._en_bin_center = en_bin_center
 
     def __call__(self, energies):
         # Getting xmax0 and scaling with energy according <Xmax>
         if (self._xmax0 == 0) or (self._xmax0 is None):
             return np.zeros(energies.shape[0], dtype=np.float32)
         else:
-            return self._xmax0 + self.elongation_rate * np.log10(energies / self._en0)
+            return self._xmax0 + self.elongation_rate * np.log10(
+                energies / self._en_bin_center
+            )
