@@ -53,15 +53,19 @@ def std_ta_energy_grid():
 
 
 class XmaxReader:
-    def __init__(self, xmax_data_dir, xmax_data_files, model="QGSJetII-04"):
+    def __init__(self, data_dir, glob_pattern, model="QGSJetII-04"):
+
+        self.data_dir = data_dir
+        self.glob_pattern = glob_pattern
+        self.model = model
 
         self.empty = False
-        if xmax_data_dir is None:
+        if self.data_dir is None:
             self.empty = True
             return
 
         self.elongation_rate = DXMAX_PARAMS[model][1]
-        xmax_files = data_files(data_dir=xmax_data_dir, glob_pattern=xmax_data_files)
+        xmax_files = data_files(data_dir=self.data_dir, glob_pattern=self.glob_pattern)
 
         file_idx = []
         all_xmax = []

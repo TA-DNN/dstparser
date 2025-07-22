@@ -36,25 +36,78 @@ def process_files(task_function, config):
         task_function(ifiles, ofile, config)
 
 
+def update_xmax_reader(xmax_reader, file):
+    """
+    Update the xmax_reader if the directory of the file changes.
+    """
+
+    if xmax_reader is None:
+        return None
+
+    parent_dir = Path(file).parent
+    if xmax_reader.data_dir != parent_dir:
+        glob_pattern = xmax_reader.glob_pattern
+        model = xmax_reader.model
+        xmax_reader = XmaxReader(parent_dir, glob_pattern, model)
+    return xmax_reader
+
+
+def init_xmax_reader(config, init_file=None):
+    """
+    Typically, xmax_reader reads data files for xmax from a parent directory of dst files
+    (this is how it is used now).
+    However, for TAx4 files this behavior should be changed, because xmax files are in a different directory.
+    In this case xmax_dir should be set in the config.
+    """
+
+    # Default values, can be overridden by config
+    # If init_file is provided and xmax_dir is not overriden,
+    # use its parent directory as the xmax_dir (default behavior)
+    xmax_dir = "parent_dir"
+    xmax_glob_pattern = "**/DAT*_xmax.txt"
+    xmax_model = "QGSJetII-04"
+
+    # If xmax_dir is set to None, xmax_reader will be None
+    # If xmax_dir is set, then only xmax_dir directory will be used
+    if hasattr(config, "xmax_dir"):
+        xmax_dir = config.xmax_dir
+
+    if hasattr(config, "xmax_glob_pattern"):
+        xmax_glob_pattern = config.xmax_glob_pattern
+
+    if hasattr(config, "xmax_model"):
+        xmax_model = config.xmax_model
+
+    update_reader = False
+    if xmax_dir == "parent_dir":
+        if init_file is not None:
+            xmax_dir = Path(init_file).parent
+            update_reader = True  # standard behavior
+        else:
+            xmax_dir = None
+
+    if xmax_dir is None:
+        xmax_reader = None
+    else:
+        xmax_reader = XmaxReader(
+            data_dir=xmax_dir, glob_pattern=xmax_glob_pattern, model=xmax_model
+        )
+
+    return xmax_reader, update_reader
+
+
 def dst_to_hdf5(ifiles, ofile, config):
 
     acc_data = dict()
-    xmax_dir = Path(ifiles[0]).parent
-    # xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
-    xmax_reader = None
+    xmax_reader, update_reader = init_xmax_reader(config, init_file=ifiles[0])
+
     for file in tqdm(
         ifiles, total=len(ifiles), desc=f"DST conversion for {Path(ofile).name}"
     ):
 
-        if xmax_reader is not None:
-            # xmax_dir is the same as directory of the file
-            # but it loads many files, so better to change and
-            # initialize XmaxReader object only when the directory
-            # changes
-            cur_dir = Path(file).parent
-            if xmax_dir != cur_dir:
-                xmax_dir = cur_dir
-                xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
+        if update_reader:
+            # Update xmax_reader if the directory of the file changes
+            xmax_reader = update_xmax_reader(xmax_reader, file)
 
         data = parse_dst_file(
             file,
