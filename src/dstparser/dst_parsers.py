@@ -305,13 +305,11 @@ def parse_dst_string(dst_string):
     )
 
     if len(event_list_str) == 0:
-        return None
+        return None, None, None, None
 
-    result = {
-        "events": parse_event(event_list_str),
-        "hits": parse_sdmeta(sdmeta_list_str),
-        "waveforms": parse_sdwaveform(sdwaveform_list_str),
-        "badsd": parse_badsdinfo(badsdinfo_list_str),
-    }
+    events = parse_event(event_list_str)
+    hits = parse_sdmeta(sdmeta_list_str)
+    waveforms = parse_sdwaveform(sdwaveform_list_str)
+    badsd = parse_badsdinfo(badsdinfo_list_str)
 
-    return result
+    return events, hits, waveforms, badsd
