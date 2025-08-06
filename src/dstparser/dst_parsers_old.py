@@ -93,79 +93,9 @@ def parse_event(event_list_str):
     # 56-60 rufptn_.nhits, rufptn_.nsclust, rufptn_.nborder, rufptn_.qtot[0], rufptn_.qtot[1]
     """
 
-    print(f"event_list_str {len(event_list_str)} lines")
-
     event_list = [np.fromstring(line, sep=" ") for line in event_list_str]
-    evt = np.array(event_list).transpose().astype(np.float64)
-
-    events = {
-        "rusdmc_.parttype": evt[0],
-        "rusdmc_.energy": evt[1],
-        "rusdmc_.theta": evt[2],
-        "rusdmc_.phi": evt[3],
-        "rusdmc_.corexyz[0]": evt[4],
-        "rusdmc_.corexyz[1]": evt[5],
-        "rusdmc_.corexyz[2]": evt[6],
-        "rusdraw_.yymmdd": evt[7],
-        "rusdraw_.hhmmss": evt[8],
-        "rufptn_.nstclust": evt[9],
-        "rusdraw_.nofwf": evt[10],
-        "rusdraw_.usec": evt[11],
-        "rufldf_.energy[0]": evt[12],
-        "rufldf_.sc[0]": evt[13],
-        "rufldf_.dsc[0]": evt[14],
-        "rufldf_.chi2[0]": evt[15],
-        "rufldf_.ndof[0]": evt[16],
-        "rufldf_.xcore[0]": evt[17],
-        "rufldf_.dxcore[0]": evt[18],
-        "rufldf_.ycore[0]": evt[19],
-        "rufldf_.dycore[0]": evt[20],
-        "rufldf_.s800[0]": evt[21],
-        "rusdgeom_.theta[1]": evt[22],
-        "rusdgeom_.phi[1]": evt[23],
-        "rusdgeom_.dtheta[1]": evt[24],
-        "rusdgeom_.dphi[1]": evt[25],
-        "rusdgeom_.chi2[1]": evt[26],
-        "rusdgeom_.ndof[1]": evt[27],
-        "rusdgeom_.t0[1]": evt[28],
-        "rusdgeom_.dt0[1]": evt[29],
-        "rufldf_.bdist": evt[30],
-        "rufldf_.tdist": evt[31],
-        "rusdgeom_.theta[2]": evt[32],
-        "rusdgeom_.phi[2]": evt[33],
-        "rusdgeom_.dtheta[2]": evt[34],
-        "rusdgeom_.dphi[2]": evt[35],
-        "rusdgeom_.chi2[2]": evt[36],
-        "rusdgeom_.ndof[2]": evt[37],
-        "rusdgeom_.t0[2]": evt[38],
-        "rusdgeom_.dt0[2]": evt[39],
-        "rusdgeom_.a": evt[40],
-        "rusdgeom_.da": evt[41],
-        "rufldf_.energy[1]": evt[42],
-        "rufldf_.sc[1]": evt[43],
-        "rufldf_.dsc[1]": evt[44],
-        "rufldf_.chi2[1]": evt[45],
-        "rufldf_.ndof[1]": evt[46],
-        "rufldf_.xcore[1]": evt[47],
-        "rufldf_.dxcore[1]": evt[48],
-        "rufldf_.ycore[1]": evt[49],
-        "rufldf_.dycore[1]": evt[50],
-        "rufldf_.s800[1]": evt[51],
-        "rufldf_.theta": evt[52],
-        "rufldf_.phi": evt[53],
-        "rufldf_.dtheta": evt[54],
-        "rufldf_.dphi": evt[55],
-        "rufptn_.nhits": evt[56],
-        "rufptn_.nsclust": evt[57],
-        "rufptn_.nborder": evt[58],
-        "rufptn_.qtot[0]": evt[59],
-        "rufptn_.qtot[1]": evt[60],
-    }
-
-    print(events["rusdmc_.energy"])
-    print(events["rusdmc_.energy"].shape)
-
-    return events
+    event_list = np.array(event_list).astype(np.float32).transpose()
+    return event_list
 
 
 def parse_sdmeta(sdmeta_list_str):
@@ -185,52 +115,13 @@ def parse_sdmeta(sdmeta_list_str):
     """
     ## Detection related
 
-    print(f"sdmeta_list_str {len(sdmeta_list_str)} lines")
-
     record_size = 12
-    events = [
-        np.fromstring(line, sep=" ", dtype=np.float64)
-        .reshape(-1, record_size)
-        .transpose()
+    sdmeta_list = [
+        np.fromstring(line, sep=" ").reshape(-1, record_size).transpose()
         for line in sdmeta_list_str
     ]
 
-    # print(f"events {events[0]}")
-
-    lengths = np.fromiter(
-        (arr.shape[1] for arr in events), dtype=np.int64, count=len(events)
-    )
-
-    offsets = np.empty(len(events) + 1, dtype=np.int64)
-    offsets[0] = 0
-    offsets[1:] = lengths.cumsum()
-
-    flat_events = np.hstack(events)
-
-    hits = {
-        "rufptn_.xxyy": flat_events[0].astype(np.int32),
-        "rufptn_.isgood": flat_events[1],
-        "rufptn_.reltime[0]": flat_events[2],
-        "rufptn_.reltime[1]": flat_events[3],
-        "rufptn_.pulsa[0]": flat_events[4],
-        "rufptn_.pulsa[1]": flat_events[5],
-        "rufptn_.xyzclf[0]": flat_events[6],
-        "rufptn_.xyzclf[1]": flat_events[7],
-        "rufptn_.xyzclf[2]": flat_events[8],
-        "rufptn_.vem[0]": flat_events[9],  # vertical equivalent muon
-        "rufptn_.vem[1]": flat_events[10],
-        "rufptn_.nfold": flat_events[11],
-        "offsets": offsets,
-    }
-
-    st = offsets[5]
-    end = offsets[6]
-    print(hits["rufptn_.nfold"][st:end])
-
-    # for i, sdmeta in enumerate(events):
-    #     print(f"sdmeta_list[{i}] shape: {sdmeta.shape}")
-
-    return events
+    return sdmeta_list
 
 
 def parse_sdwaveform(sdwaveform_list_str):
@@ -244,41 +135,14 @@ def parse_sdwaveform(sdwaveform_list_str):
     """
 
     record_size = 3 + 128 * 2
-
-    # Each entry corresponds to a single event
-    events = [
-        np.fromstring(line, sep=" ", dtype=np.int64)
+    sdwaveform_list = [
+        np.fromstring(line, sep=" ", dtype=np.int32)
         .reshape(-1, record_size)
         .transpose()
         for line in sdwaveform_list_str
     ]
 
-    lengths = np.fromiter(
-        (arr.shape[1] for arr in events), dtype=np.int64, count=len(events)
-    )
-
-    offsets = np.empty(len(events) + 1, dtype=np.int64)
-    offsets[0] = 0
-    offsets[1:] = lengths.cumsum()
-
-    flat_events = np.hstack(events)
-
-    sdwaveform = {
-        "rusdraw_.xxyy": flat_events[0],
-        "rusdraw_.clkcnt": flat_events[1],
-        "rusdraw_.mclkcnt": flat_events[2],
-        # Make shape (n_waveforms, 2, 128)
-        "rusdraw_.fadc": np.stack(
-            [flat_events[3:131], flat_events[131:]], axis=0
-        ).transpose(2, 0, 1),
-        # Offsets for each event
-        "offsets": offsets,
-    }
-
-    print(sdwaveform["rusdraw_.xxyy"][offsets[5] : offsets[6]])
-    print(sdwaveform["rusdraw_.xxyy"][offsets[5] : offsets[6]].shape)
-
-    return sdwaveform
+    return sdwaveform_list
 
 
 def parse_badsdinfo(badsdinfo_list_str):

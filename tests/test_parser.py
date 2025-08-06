@@ -43,6 +43,7 @@ def test_parser(dst_file, print_read_data=False, use_ta_x4=False, add_xmax=False
 
     end = time()
     print(f"Parse time: {end - start:.3f} sec")
+    # print(data)
 
     if print_read_data:
         print(f"\nConverted arrays:\n---")
@@ -76,11 +77,11 @@ if __name__ == "__main__":
     #     "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
     # )
     # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT055402_gea.rufldf.dst.gz"
-
-    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
+    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT051402_gea.rufldf.dst.gz"
+    # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
 
     # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
     # !If you want to use TAx4 format, set use_ta_x4=True
     # !If you want to use TA format, set use_ta_x4=False
     # !By default, use_ta_x4=False
-    test_parser(dst_file, print_read_data=True, use_ta_x4=True, add_xmax=True)
+    test_parser(dst_file, print_read_data=False, use_ta_x4=False, add_xmax=True)
