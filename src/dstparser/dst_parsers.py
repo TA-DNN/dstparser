@@ -94,7 +94,7 @@ def parse_event(event_list_str):
     """
 
     event_list = [np.fromstring(line, sep=" ") for line in event_list_str]
-    event_list = np.array(event_list).astype(np.float32).transpose()
+    event_list = np.array(event_list).astype(np.float64).transpose()
     return event_list
 
 

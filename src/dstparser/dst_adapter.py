@@ -40,19 +40,23 @@ def corsika_id2mass(corsika_pid: np.ndarray) -> np.ndarray:
     return np.where(corsika_pid == 14, 1, corsika_pid // 100).astype(np.int32)
 
 
-def rec_coreposition_to_CLF_meters(
-    core_position_rec: np.ndarray, is_error: bool = False
-) -> np.ndarray:
+def rec_coreposition_to_CLF_meters(core_position_rec, option):
     """
     Converts reconstructed core position to CLF (Central Laser Facility) coordinates in meters.
-    - If is_error: returns error in meters (scales by detector distance).
-    - Otherwise: shifts by CLF origin and scales.
+    - If option is 'x' or 'y': shifts by CLF origin and scales.
+    - If option is 'dx' or 'dy': returns error in meters (scales by detector distance).
     """
-    if is_error:
-        return DETECTOR_DISTANCE * core_position_rec
-    return DETECTOR_DISTANCE * (
-        core_position_rec - np.array([CLF_ORIGIN_X, CLF_ORIGIN_Y])
-    )
+    detector_dist = 1200  # meters
+    clf_origin_x = 12.2435
+    clf_origin_y = 16.4406
+    if option == "x":
+        return detector_dist * (core_position_rec - clf_origin_x)
+    elif option == "y":
+        return detector_dist * (core_position_rec - clf_origin_y)
+    elif option == "dx":
+        return detector_dist * core_position_rec
+    elif option == "dy":
+        return detector_dist * core_position_rec
 
 
 def _calculate_shower_axis(zenith: np.ndarray, azimuth: np.ndarray) -> np.ndarray:
@@ -104,7 +108,14 @@ def shower_params(
     data["energy"] = event_list[1]
     if xmax_data is not None:
         data["xmax"] = xmax_data(data["energy"])
-    data["shower_axis"] = _calculate_shower_axis(event_list[2], event_list[3])
+    data["shower_axis"] = np.array(
+        [
+            np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
+            np.sin(event_list[2]) * np.sin(event_list[3] + np.pi),
+            np.cos(event_list[2]),
+        ],
+        dtype=np.float32,
+    ).transpose()
     data["shower_core"] = np.array(
         event_list[4:7, :].transpose() * TO_METERS, dtype=np.float32
     )
@@ -139,21 +150,68 @@ def standard_recon(data: Dict[str, Any], dst_lists: List[np.ndarray]) -> None:
             "std_recon_ldf_chi2": event_list[15],
             "std_recon_ldf_ndof": event_list[16],
             # Shower core positions and errors (standard and combined)
-            "std_recon_shower_core": rec_coreposition_to_CLF_meters(np.array([event_list[17], event_list[19]]).transpose(1, 0)),
-            "std_recon_shower_core_err": rec_coreposition_to_CLF_meters(np.array([event_list[18], event_list[20]]).transpose(1, 0), is_error=True),
+            "std_recon_shower_core": np.array(
+                [
+                    rec_coreposition_to_CLF_meters(event_list[17], option="x"),
+                    rec_coreposition_to_CLF_meters(event_list[19], option="y"),
+                ]
+            ).transpose(1, 0),
+            "std_recon_shower_core_err": np.array(
+                [
+                    rec_coreposition_to_CLF_meters(event_list[18], option="dx"),
+                    rec_coreposition_to_CLF_meters(event_list[20], option="dy"),
+                ]
+            ).transpose(1, 0),
             "std_recon_s800": event_list[21],
             "std_recon_combined_energy": event_list[42],
             "std_recon_combined_scale": event_list[43],
             "std_recon_combined_scale_err": event_list[44],
             "std_recon_combined_chi2": event_list[45],
             "std_recon_combined_ndof": event_list[46],
-            "std_recon_combined_shower_core": rec_coreposition_to_CLF_meters(np.array([event_list[47], event_list[49]]).transpose(1, 0)),
-            "std_recon_combined_shower_core_err": rec_coreposition_to_CLF_meters(np.array([event_list[48], event_list[50]]).transpose(1, 0), is_error=True),
+            "std_recon_combined_shower_core": np.array(
+                [
+                    rec_coreposition_to_CLF_meters(event_list[47], option="x"),
+                    rec_coreposition_to_CLF_meters(event_list[49], option="y"),
+                ]
+            ).transpose(1, 0),
+            "std_recon_combined_shower_core_err": np.array(
+                [
+                    rec_coreposition_to_CLF_meters(event_list[48], option="dx"),
+                    rec_coreposition_to_CLF_meters(event_list[50], option="dy"),
+                ]
+            ).transpose(1, 0),
             "std_recon_combined_s800": event_list[51],
             # Shower axis directions for different reconstructions
-            "std_recon_shower_axis": _calculate_shower_axis(event_list[32], event_list[33]),
-            "std_recon_shower_axis_fixed_curve": _calculate_shower_axis(event_list[22], event_list[23]),
-            "std_recon_shower_axis_combined": _calculate_shower_axis(event_list[52], event_list[53]),
+            "std_recon_shower_axis": np.array(
+                [
+                    np.sin(np.deg2rad(event_list[32] + 0.5))
+                    * np.cos(np.deg2rad(event_list[33]) + np.pi),
+                    np.sin(np.deg2rad(event_list[32] + 0.5))
+                    * np.sin(np.deg2rad(event_list[33]) + np.pi),
+                    np.cos(np.deg2rad(event_list[32] + 0.5)),
+                ],
+                dtype=np.float32,
+            ).transpose(),
+            "std_recon_shower_axis_fixed_curve": np.array(
+                [
+                    np.sin(np.deg2rad(event_list[22] + 0.5))
+                    * np.cos(np.deg2rad(event_list[23]) + np.pi),
+                    np.sin(np.deg2rad(event_list[22] + 0.5))
+                    * np.sin(np.deg2rad(event_list[23]) + np.pi),
+                    np.cos(np.deg2rad(event_list[22] + 0.5)),
+                ],
+                dtype=np.float32,
+            ).transpose(),
+            "std_recon_shower_axis_combined": np.array(
+                [
+                    np.sin(np.deg2rad(event_list[52] + 0.5))
+                    * np.cos(np.deg2rad(event_list[53]) + np.pi),
+                    np.sin(np.deg2rad(event_list[52] + 0.5))
+                    * np.sin(np.deg2rad(event_list[53]) + np.pi),
+                    np.cos(np.deg2rad(event_list[52] + 0.5)),
+                ],
+                dtype=np.float32,
+            ).transpose(),
             # Fit quality and geometry
             "std_recon_geom_chi2": event_list[36],
             "std_recon_geom_ndof": event_list[37],
@@ -171,10 +229,10 @@ def standard_recon(data: Dict[str, Any], dst_lists: List[np.ndarray]) -> None:
         "std_recon_shower_axis_err_fixed_curve": (22, 24, 25),
         "std_recon_shower_axis_err_combined": (52, 54, 55),
     }.items():
-        zenith = np.deg2rad(event_list[zenith_idx])
-        err1 = event_list[err_idx1]
-        err2 = event_list[err_idx2]
-        data[key] = np.sqrt(err1**2 + (np.sin(zenith) * err2) ** 2)
+        data[key] = np.sqrt(
+            event_list[err_idx1] ** 2
+            + (np.sin(np.deg2rad(event_list[zenith_idx])) * event_list[err_idx2]) ** 2
+        )
 
 
 def cut_events(
@@ -346,6 +404,9 @@ def detector_readings_awkward(
     sdmeta_list, sdwaveform_list, badsdinfo_list = dst_lists[1:4]
     hits_data = {
         "det_id": [],
+        "x": [],
+        "y": [],
+        "z": [],
         "nfold": [],
         "arrival_times": [],
         "total_signals": [],
@@ -370,6 +431,9 @@ def detector_readings_awkward(
 
         hits_counts.append(event.shape[1])
         hits_data["det_id"].extend(event[0])
+        hits_data["x"].extend(event[6])
+        hits_data["y"].extend(event[7])
+        hits_data["z"].extend(event[8])
         hits_data["nfold"].extend(event[11])
 
         fadc_per_vem_low = event[9]
@@ -400,6 +464,9 @@ def detector_readings_awkward(
 
     # Store as awkward arrays (variable-length per event)
     data["hits_det_id"] = ak.unflatten(np.array(hits_data["det_id"]), hits_counts)
+    data["hits_x"] = ak.unflatten(np.array(hits_data["x"]), hits_counts)
+    data["hits_y"] = ak.unflatten(np.array(hits_data["y"]), hits_counts)
+    data["hits_z"] = ak.unflatten(np.array(hits_data["z"]), hits_counts)
     data["hits_nfold"] = ak.unflatten(np.array(hits_data["nfold"]), hits_counts)
 
     if avg_traces:
