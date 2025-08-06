@@ -93,10 +93,12 @@ def parse_event(event_list_str):
     # 56-60 rufptn_.nhits, rufptn_.nsclust, rufptn_.nborder, rufptn_.qtot[0], rufptn_.qtot[1]
     """
 
-    print(f"event_list_str {len(event_list_str)} lines")
+    # print(f"event_list_str {len(event_list_str)} lines")
 
-    event_list = [np.fromstring(line, sep=" ") for line in event_list_str]
-    evt = np.array(event_list).transpose().astype(np.float64)
+    event_list = [
+        np.fromstring(line, sep=" ", dtype=np.float64) for line in event_list_str
+    ]
+    evt = np.array(event_list).transpose()
 
     events = {
         "rusdmc_.parttype": evt[0],
@@ -162,10 +164,46 @@ def parse_event(event_list_str):
         "rufptn_.qtot[1]": evt[60],
     }
 
-    print(events["rusdmc_.energy"])
-    print(events["rusdmc_.energy"].shape)
+    # print(events["rusdmc_.energy"])
+    # print(events["rusdmc_.energy"].shape)
 
     return events
+
+
+def flat_arrays_with_offsets(list_of_strings, record_size, dtype):
+    """
+    Parse the list of strings into a flat array with offsets
+
+    This is useful for events with variable length data
+    where each event can have a different number of entries
+    For example, in the case of badsdinfo, each event can have a different
+    number of SDs that are out
+    This function will return a flat array and offsets for each event
+    The flat array will have shape (n_entries, record_size)
+    """
+
+    # Each entry corresponds to a single event
+    events = [
+        np.fromstring(line, sep=" ", dtype=dtype).reshape(-1, record_size).transpose()
+        for line in list_of_strings
+    ]
+
+    # Calculate lengths of each event
+    # This is the number of entries in each event
+    lengths = np.fromiter(
+        (arr.shape[1] for arr in events), dtype=np.int64, count=len(events)
+    )
+
+    # Create offsets for each event
+    # Offsets will be used to slice the flat array into individual events
+    # start = offsets[0], end = offsets[1] - slice of flat array for first event
+    offsets = np.empty(len(events) + 1, dtype=np.int64)
+    offsets[0] = 0
+    offsets[1:] = lengths.cumsum()
+
+    # Flatten the list of arrays into a single array
+    flat_events = np.hstack(events)
+    return flat_events, offsets
 
 
 def parse_sdmeta(sdmeta_list_str):
@@ -185,29 +223,11 @@ def parse_sdmeta(sdmeta_list_str):
     """
     ## Detection related
 
-    print(f"sdmeta_list_str {len(sdmeta_list_str)} lines")
-
-    record_size = 12
-    events = [
-        np.fromstring(line, sep=" ", dtype=np.float64)
-        .reshape(-1, record_size)
-        .transpose()
-        for line in sdmeta_list_str
-    ]
-
-    # print(f"events {events[0]}")
-
-    lengths = np.fromiter(
-        (arr.shape[1] for arr in events), dtype=np.int64, count=len(events)
+    flat_events, offsets = flat_arrays_with_offsets(
+        list_of_strings=sdmeta_list_str, record_size=12, dtype=np.float64
     )
 
-    offsets = np.empty(len(events) + 1, dtype=np.int64)
-    offsets[0] = 0
-    offsets[1:] = lengths.cumsum()
-
-    flat_events = np.hstack(events)
-
-    hits = {
+    hits_info = {
         "rufptn_.xxyy": flat_events[0].astype(np.int32),
         "rufptn_.isgood": flat_events[1],
         "rufptn_.reltime[0]": flat_events[2],
@@ -223,14 +243,7 @@ def parse_sdmeta(sdmeta_list_str):
         "offsets": offsets,
     }
 
-    st = offsets[5]
-    end = offsets[6]
-    print(hits["rufptn_.nfold"][st:end])
-
-    # for i, sdmeta in enumerate(events):
-    #     print(f"sdmeta_list[{i}] shape: {sdmeta.shape}")
-
-    return events
+    return hits_info
 
 
 def parse_sdwaveform(sdwaveform_list_str):
@@ -243,27 +256,11 @@ def parse_sdwaveform(sdwaveform_list_str):
                         "rusdraw_.fadc[1]"]
     """
 
-    record_size = 3 + 128 * 2
-
-    # Each entry corresponds to a single event
-    events = [
-        np.fromstring(line, sep=" ", dtype=np.int64)
-        .reshape(-1, record_size)
-        .transpose()
-        for line in sdwaveform_list_str
-    ]
-
-    lengths = np.fromiter(
-        (arr.shape[1] for arr in events), dtype=np.int64, count=len(events)
+    flat_events, offsets = flat_arrays_with_offsets(
+        list_of_strings=sdwaveform_list_str, record_size=(3 + 128 * 2), dtype=np.int32
     )
 
-    offsets = np.empty(len(events) + 1, dtype=np.int64)
-    offsets[0] = 0
-    offsets[1:] = lengths.cumsum()
-
-    flat_events = np.hstack(events)
-
-    sdwaveform = {
+    waveforms = {
         "rusdraw_.xxyy": flat_events[0],
         "rusdraw_.clkcnt": flat_events[1],
         "rusdraw_.mclkcnt": flat_events[2],
@@ -275,10 +272,10 @@ def parse_sdwaveform(sdwaveform_list_str):
         "offsets": offsets,
     }
 
-    print(sdwaveform["rusdraw_.xxyy"][offsets[5] : offsets[6]])
-    print(sdwaveform["rusdraw_.xxyy"][offsets[5] : offsets[6]].shape)
+    # print(waveforms["rusdraw_.xxyy"][offsets[5] : offsets[6]])
+    # print(waveforms["rusdraw_.xxyy"][offsets[5] : offsets[6]].shape)
 
-    return sdwaveform
+    return waveforms
 
 
 def parse_badsdinfo(badsdinfo_list_str):
@@ -288,14 +285,17 @@ def parse_badsdinfo(badsdinfo_list_str):
     vector<Int_t> bitfout;
     """
 
-    badsdinfo_list = []
-    for line in badsdinfo_list_str:
-        mixed_array = np.fromstring(line, sep=" ", dtype=np.int32)
-        # xxyyout = mixed_array[::2]
-        # bitfout = mixed_array[1::2]
-        badsdinfo_list.append(mixed_array[::2])
+    flat_events, offsets = flat_arrays_with_offsets(
+        list_of_strings=badsdinfo_list_str, record_size=2, dtype=np.int32
+    )
 
-    return badsdinfo_list
+    res = {
+        "bsdinfo_.xxyyout[x]": flat_events[0],
+        "bsdinfo_.bitfout[x]": flat_events[1],
+        "offsets": offsets,
+    }
+
+    return res
 
 
 def parse_dst_string(dst_string):
@@ -307,9 +307,11 @@ def parse_dst_string(dst_string):
     if len(event_list_str) == 0:
         return None
 
-    event_list = parse_event(event_list_str)
-    sdmeta_list = parse_sdmeta(sdmeta_list_str)
-    sdwaveform_list = parse_sdwaveform(sdwaveform_list_str)
-    badsdinfo_list = parse_badsdinfo(badsdinfo_list_str)
+    result = {
+        "events": parse_event(event_list_str),
+        "hits": parse_sdmeta(sdmeta_list_str),
+        "waveforms": parse_sdwaveform(sdwaveform_list_str),
+        "badsd": parse_badsdinfo(badsdinfo_list_str),
+    }
 
-    return event_list, sdmeta_list, sdwaveform_list, badsdinfo_list
+    return result
