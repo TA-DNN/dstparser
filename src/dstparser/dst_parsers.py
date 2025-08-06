@@ -229,7 +229,7 @@ def parse_sdmeta(sdmeta_list_str):
 
     hits_info = {
         "rufptn_.xxyy": flat_events[0].astype(np.int32),
-        "rufptn_.isgood": flat_events[1],
+        "rufptn_.isgood": flat_events[1].astype(np.int32),
         "rufptn_.reltime[0]": flat_events[2],
         "rufptn_.reltime[1]": flat_events[3],
         "rufptn_.pulsa[0]": flat_events[4],
@@ -239,7 +239,7 @@ def parse_sdmeta(sdmeta_list_str):
         "rufptn_.xyzclf[2]": flat_events[8],
         "rufptn_.vem[0]": flat_events[9],  # vertical equivalent muon
         "rufptn_.vem[1]": flat_events[10],
-        "rufptn_.nfold": flat_events[11],
+        "rufptn_.nfold": flat_events[11].astype(np.int32),
         "offsets": offsets,
     }
 

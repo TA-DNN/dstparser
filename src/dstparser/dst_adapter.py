@@ -47,12 +47,13 @@ def shower_params(data, dst_data, xmax_data):
 
     # shower core in cm
     data["shower_core"] = np.array(
-        np.concatenate(
+        np.stack(
             [
                 events["rusdmc_.corexyz[0]"],
                 events["rusdmc_.corexyz[1]"],
                 events["rusdmc_.corexyz[2]"],
-            ]
+            ],
+            axis=1,
         ),
         dtype=np.float32,
     )
@@ -485,6 +486,121 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
     return data
 
 
+def filter_offsets(mask, offsets):
+    # 1) compute counts per segment
+    counts = np.add.reduceat(mask.astype(int), offsets[:-1])
+    # 2) build new offsets
+    return np.concatenate(([0], np.cumsum(counts)))
+
+
+def detector_readings_flat(data, hits, waveforms):
+    # for c = 3e10 cm/s:
+    # to_nsec = 4 * 1000
+    # The below is more correct for c = 2.998e10 cm/c,
+    # to_nsec = 4002.7691424
+
+    # Filter for isgood > 2:
+    hit_mask = hits["rufptn_.isgood"] > 2
+    # Repeat hit_mask nfold times
+    wf_mask = np.repeat(hit_mask, hits["rufptn_.nfold"])
+
+    # Filter offsets according to masks
+    hits_offsets = filter_offsets(hit_mask, hits["offsets"])
+    waveforms_offsets = filter_offsets(wf_mask, waveforms["offsets"])
+
+    # Filter hits
+    hits = {key: value[hit_mask] for key, value in hits.items() if key != "offsets"}
+    hits["offsets"] = hits_offsets
+    hits["wf_offsets"] = np.concatenate(([0], np.cumsum(hits["rufptn_.nfold"])))
+
+    # Filter waveforms
+    waveforms = {
+        key: value[wf_mask] for key, value in waveforms.items() if key != "offsets"
+    }
+    waveforms["offsets"] = waveforms_offsets
+
+    # Check if filtering is correct
+    # Compare detectors ids for hits and corresponding waveforms
+    assert np.all(
+        np.repeat(hits["rufptn_.xxyy"], hits["rufptn_.nfold"])
+        == waveforms["rusdraw_.xxyy"]
+    ), "Hits are not in agreement with waverforms"
+
+    # -------- Example/reminder how to work with offsets:
+    # We work with flattened arrays like this:
+    # Example: get hits for the event with index ievent:
+    # start, end = hits["offsets"][ievent], hits["wf_offsets"][ievent + 1]
+    # hits_arrv_time_lower = hits[rufptn_.reltime[0]][start:end]
+    #
+
+    # Example: get a waveform for specific hit:
+    # ihit - global index in hits
+    # start, end = hits["wf_offsets"][ihit], hits["wf_offsets"][ihit + 1]
+    # waveforms_fadc = waveforms["rusdraw_.fadc"][start:end]
+    #
+    # For vectorized work use np.split and np.reduceat
+    # ---------
+
+    # Create data arrays:
+
+    # We use counter sep. dist units, to get in nsec, multiply to to_nsec
+    # We normalize it anyway ...
+    data["arrival_times"] = np.stack(
+        [hits["rufptn_.reltime[0]"], hits["rufptn_.reltime[1]"]], axis=1
+    )
+
+    # Pulse area in VEM (pedestals subtracted)
+    data["pulse_area"] = np.stack(
+        [hits["rufptn_.pulsa[0]"], hits["rufptn_.pulsa[1]"]], axis=1
+    )
+
+    # SD coordinates in CLF frame [1200m units]
+    # Probably for TAx4 it is in [2080m units]
+    # Looks like reasonable choice (not very large magnitude)
+    data["detector_positions"] = np.stack(
+        [
+            hits["rufptn_.xyzclf[0]"],
+            hits["rufptn_.xyzclf[1]"],
+            hits["rufptn_.xyzclf[2]"],
+        ],
+        axis=1,
+    )
+
+    # DNN might be useful to know (3,4,5) as we filtered out (0,1,2)
+    # 0: Counter not working properly
+    # 1: Hit not part of any cluster
+    # 2: Part of space cluster
+    # 3: Passed rough time pattern recognition
+    # 4: Part of the event (highest quality)
+    # 5: Saturated counter
+    data["status"] = hits["rufptn_.isgood"]
+    # Might be useful to know how long is time trace
+    data["nfold"] = hits["rufptn_.nfold"]
+    # For DNN it might be easier to cut hidden space based on integer ids
+    data["detector_ids"] = hits["rufptn_.xxyy"]
+    # Devision of flattened array to events
+    data["hit_offsets"] = hits["offsets"]
+    data["hit_tt_offsets"] = hits["wf_offsets"]
+
+    # Current suggestion is following detector_features:
+    # arrival_times 2
+    # pulse_area 2
+    # detector_positions 3
+    # status 1
+    # nfold 1
+    # detector_ids 1
+    # --- Total 10 features
+
+    # Combine vem values (VEM/count)
+    vem = np.stack([hits["rufptn_.vem[0]"], hits["rufptn_.vem[1]"]], axis=1)
+    # Reshape to the same shape as fadc
+    vem = np.repeat(vem, hits["rufptn_.nfold"], axis=0)[:, :, None]
+    # Convert FADC to VEMs
+    data["time_traces"] = waveforms["rusdraw_.fadc"] / vem
+    # Devision of flattened time_traces to events
+    data["tt_offsets"] = waveforms["offsets"]
+
+
 def parse_dst_file(
     dst_file,
     ntile=7,
@@ -495,8 +611,17 @@ def parse_dst_file(
     config=None,
 ):
     #  ntile - number of SD per one side
+    import time
+
+    start = time.time()
     dst_string = read_dst_file(dst_file)
+    end = time.time()
+    print(f"time0 = {end-start} sec")
+
+    start = time.time()
     dst_data = parse_dst_string(dst_string)
+    end = time.time()
+    print(f"time1 = {end-start} sec")
 
     if dst_data is None:
         return None
@@ -507,19 +632,208 @@ def parse_dst_file(
 
     # Dictionary with parsed data
     data = dict()
+
+    start = time.time()
     if add_shower_params:
         data = shower_params(data, dst_data, xmax_reader)
+    end = time.time()
+    print(f"time_shp = {end-start} sec")
 
-    print("norm=", np.linalg.norm(data["shower_axis"], axis=1))
-
+    start = time.time()
     if add_standard_recon:
         data = standard_recon(data, dst_data)
 
-    for key in data:
-        if "std" in key:
-            print(key, data[key].shape)
+    end = time.time()
+    print(f"time_recon = {end-start} sec")
 
-    data = detector_readings(data, dst_lists, ntile, avg_traces)
+    # for key in data:
+    #     # if "std" in key:
+    #     print(key, data[key].shape)
+
+    # for key in dst_data["hits"]:
+    #     print(key, dst_data["hits"][key].shape)
+
+    # to_nsec = 4 * 1000
+    to_nsec = 4002.7691424
+    hits = dst_data["hits"]
+    waveforms = dst_data["waveforms"]
+
+    hit_mask = hits["rufptn_.isgood"] > 2
+    hit_nfold = hits["rufptn_.nfold"]
+    wf_mask = np.repeat(hit_mask, hit_nfold)
+
+    hits_offsets = filter_offsets(hit_mask, hits["offsets"])
+    waveforms_offsets = filter_offsets(wf_mask, waveforms["offsets"])
+
+    hits = {key: value[hit_mask] for key, value in hits.items() if key != "offsets"}
+    hits["offsets"] = hits_offsets
+    hits["wf_offsets"] = np.concatenate(([0], np.cumsum(hits["rufptn_.nfold"])))
+
+    # Example: get hits for the event:
+    # start, end = hits["offsets"][ievent], hits["wf_offsets"][ievent + 1]
+    # hits_arrv_time_lower = hits[rufptn_.reltime[0]]
+    #
+
+    # Example: get a waveform for specific hit:
+    # ihit - global index in hits
+    # start, end = hits["wf_offsets"][ihit], hits["wf_offsets"][ihit + 1]
+    # waveforms_fadc = waveforms["rusdraw_.fadc"][start:end]
+
+    waveforms = {
+        key: value[wf_mask] for key, value in waveforms.items() if key != "offsets"
+    }
+    waveforms["offsets"] = waveforms_offsets
+
+    print(waveforms["rusdraw_.xxyy"])
+    # Probably, should be deleted if nothing caught in future
+    assert np.all(
+        np.repeat(hits["rufptn_.xxyy"], hits["rufptn_.nfold"])
+        == waveforms["rusdraw_.xxyy"]
+    ), "Hits are not in agreement with waverforms"
+
+    arrival_times = (
+        np.stack([hits["rufptn_.reltime[0]"], hits["rufptn_.reltime[1]"]], axis=1)
+        * to_nsec
+    )
+
+    pulse_area = np.stack([hits["rufptn_.pulsa[0]"], hits["rufptn_.pulsa[1]"]], axis=1)
+
+    detector_positions = np.stack(
+        [
+            hits["rufptn_.xyzclf[0]"],
+            hits["rufptn_.xyzclf[1]"],
+            hits["rufptn_.xyzclf[2]"],
+        ],
+        axis=1,
+    )
+
+    status = hits["rufptn_.isgood"]
+    nfold = hits["rufptn_.nfold"]
+    detector_ids = hits["rufptn_.xxyy"]
+
+    print(detector_positions[0])
+
+    # Combine vem
+    vem = np.stack([hits["rufptn_.vem[0]"], hits["rufptn_.vem[1]"]], axis=1)
+    # Reshape to the same shape as fadc
+    vem = np.repeat(vem, hits["rufptn_.nfold"], axis=0)[:, :, None]
+    time_traces = waveforms["rusdraw_.fadc"] / vem
+    print(time_traces.dtype)
+
+    # np.repeat(vem, hits["rufptn_.nfold"])
+    # vem_repeat = np.repeat(vem, hits["rufptn_.nfold"], axis=0)
+    # print(vem.shape, hits["rufptn_.nfold"].shape)
+    # print(time_traces[0, 0])
+    # print(waveforms["rusdraw_.fadc"][0, 0])
+
+    # print(waveforms["offsets"][0:10].dtype)
+
+    # print(np.diff(hits["wf_offsets"])[0:40])
+    # wf = np.split(waveforms["rusdraw_.fadc"], hits["wf_offsets"][19 : 19 + 2])[1]
+    # hh = np.split(hits["offsets"])
+
+    # print(wf[:, 0, :].ravel().shape)
+    # print(wf[:, 0, :])
+
+    # for ii, w in enumerate(wf):
+    #     print(ii, w.shape)
+
+    # print(hits["wf_offsets"].shape)
+    # print(hits["rufptn_.isgood"].shape)
+
+    # nevt = len(hits["offsets"]) - 1
+    # for i in nevt:
+    #     st = hits["offsets"][i]
+    #     end = hits["offsets"][i+1]
+    #     print(hits["wf_offsets"].shape)
+
+    # for key in waveforms:
+    #     waveforms[key] = waveforms[key][wf_mask]
+
+    # new_offsets = filter_offsets(hits["rufptn_.isgood"] > 2, hits["offsets"])
+    # print("old_off", hits["offsets"])
+    # print("new_off", new_offsets)
+    # print("new_shape", hits["rufptn_.isgood"][hits["rufptn_.isgood"] > 2].shape)
+
+    # arrival_times = (
+    #     np.stack([hits["rufptn_.reltime[0]"], hits["rufptn_.reltime[1]"]], axis=1)
+    #     * to_nsec
+    # )
+
+    # print(arrival_times.shape)
+    # pulse_area = np.stack([hits["rufptn_.pulsa[0]"], hits["rufptn_.pulsa[1]"]], axis=1)
+    # detector_positions = np.stack(
+    #     [
+    #         hits["rufptn_.xyzclf[0]"],
+    #         hits["rufptn_.xyzclf[1]"],
+    #         hits["rufptn_.xyzclf[2]"],
+    #     ],
+    #     axis=1,
+    # )
+    # nfold = hits["rufptn_.nfold"]
+    # detector_ids = hits["rufptn_.xxyy"]
+    # isgood = hits["rufptn_.isgood"]
+
+    # # print(isgood.shape, np.sum(isgood > 1), np.sum(isgood > 0), np.sum(isgood == 0))
+    # # print(hits["rufptn_.xxyy"][isgood == 0])
+
+    # waveforms = dst_data["waveforms"]
+
+    # print("ursdraw_.xxyy", waveforms["rusdraw_.xxyy"])
+    # nevt = len(waveforms["offsets"]) - 1
+    # for i in range(nevt):
+    #     s = waveforms["offsets"][i]
+    #     e = waveforms["offsets"][i + 1]
+
+    #     sh = hits["offsets"][i]
+    #     eh = hits["offsets"][i + 1]
+    #     print(
+    #         "w",
+    #         i,
+    #         waveforms["rusdraw_.xxyy"][s:e],
+    #         waveforms["rusdraw_.xxyy"][s:e].shape,
+    #     )
+
+    #     print("h", i, hits["rufptn_.xxyy"][sh:eh], hits["rufptn_.xxyy"][sh:eh].shape)
+    #     print(
+    #         "f",
+    #         i,
+    #         hits["rufptn_.nfold"][sh:eh],
+    #         np.cumsum(hits["rufptn_.nfold"][sh:eh]),
+    #     )
+    #     print("g", i, hits["rufptn_.isgood"][sh:eh])
+
+    # badsd = dst_data["badsd"]
+    # print(np.unique(badsd["bsdinfo_.xxyyout[x]"]))
+    # print(hits["rufptn_.xxyy"])
+    # # print(badsd["offsets"])
+    # # print(hits["offsets"])
+
+    # print(
+    #     "npnpn= ", np.sum(np.isin(hits["rufptn_.xxyy"], badsd["bsdinfo_.xxyyout[x]"]))
+    # )
+
+    # nevents = len(hits["offsets"]) - 1
+    # for ievt in range(nevents):
+    #     hit_start = hits["offsets"][ievt]
+    #     hit_end = hits["offsets"][ievt + 1]
+    #     hit_detectors = hits["rufptn_.xxyy"][hit_start:hit_end]
+
+    #     bsd_start = badsd["offsets"][ievt]
+    #     bsd_end = badsd["offsets"][ievt + 1]
+    #     bad_detectors = badsd["bsdinfo_.xxyyout[x]"][bsd_start:bsd_end]
+
+    #     # print("hit_det", hit_detectors)
+    #     # print("bad_det", bad_detectors)
+    #     print(ievt, np.sum(np.isin(hit_detectors, bad_detectors)))
+
+    # print(ievt, hit_detectors)
+
+    # print(data["energy"].shape)
+    # for key in dst_data["waveforms"]:
+    #     print(key, dst_data["waveforms"][key].shape)
+
+    # data = detector_readings(data, dst_lists, ntile, avg_traces)
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
