@@ -24,7 +24,7 @@ from dstparser.xmax_reader import XmaxReader
 # ───────────────────────────────────────────────────────────────────────────────
 # Hard‑coded parameters (edit these paths if needed)
 DST_DIR         = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
-OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/parse_3_dst/parsed_events.h5")
+OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/small_event_dataset/parsed_events.h5")
 XMAX_DATA_DIR   = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
 XMAX_DATA_FILES = "*_xmax.txt"
 CPU_CORES       = 48
@@ -85,7 +85,7 @@ CONSTANT_KEYS = [
 
 
 # Hit‑ and trace‑field counts
-HIT_FIELDS   = 8   # [det_id, is_good, x, y, z, nfold, arrival_time, total_signal]
+HIT_FIELDS   = 10   # [det_id, is_good, x, y, z, nfold, arrival_time_low, arrival_time_up, total_signal_low, total_signal_up]
 TRACE_FIELDS = 2   # [low, up] per window
 
 
@@ -105,23 +105,25 @@ def build_event_array(data, idx):
     y_coords = ak.to_numpy(data['hits_y'][idx])
     z_coords = ak.to_numpy(data['hits_z'][idx])
     nfolds = ak.to_numpy(data['hits_nfold'][idx])
-    lows   = ak.to_numpy(data['hits_arrival_times_low'][idx])
-    ups    = ak.to_numpy(data['hits_arrival_times_up'][idx])
-    sl     = ak.to_numpy(data['hits_total_signals_low'][idx])
-    su     = ak.to_numpy(data['hits_total_signals_up'][idx])
+    arrival_lows   = ak.to_numpy(data['hits_arrival_times_low'][idx])
+    arrival_ups    = ak.to_numpy(data['hits_arrival_times_up'][idx])
+    signal_lows    = ak.to_numpy(data['hits_total_signals_low'][idx])
+    signal_ups     = ak.to_numpy(data['hits_total_signals_up'][idx])
     goods  = (ak.to_numpy(data.get('hits_good', np.ones_like(det_ids)))[idx]
               if 'hits_good' in data else np.ones_like(det_ids, dtype=np.float64))
 
     H = det_ids.size
     hits_flat = []
     for j in range(H):
-        did     = float(det_ids[j])
-        x, y, z = float(x_coords[j]), float(y_coords[j]), float(z_coords[j])
-        is_good = float(goods[j])
-        nf      = float(nfolds[j])
-        arrival = float((lows[j] + ups[j]) / 2.0)
-        total   = float((sl[j] + su[j]) / 2.0)
-        hits_flat.extend([did, is_good, x, y, z, nf, arrival, total])
+        did          = float(det_ids[j])
+        x, y, z      = float(x_coords[j]), float(y_coords[j]), float(z_coords[j])
+        is_good      = float(goods[j])
+        nf           = float(nfolds[j])
+        arrival_low  = float(arrival_lows[j])
+        arrival_up   = float(arrival_ups[j])
+        signal_low   = float(signal_lows[j])
+        signal_up    = float(signal_ups[j])
+        hits_flat.extend([did, is_good, x, y, z, nf, arrival_low, arrival_up, signal_low, signal_up])
     hits_arr = np.array(hits_flat, dtype=np.float64)
 
     # 3) time traces
