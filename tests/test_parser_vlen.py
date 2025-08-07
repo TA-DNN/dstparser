@@ -44,17 +44,6 @@ def test_parser(dst_file, print_read_data=False, add_xmax=False):
             else:
                 print(key, len(val), val)
 
-    # print(f'energy = {data["energy"]}')
-    # print(f'xmax = {data["xmax"]}')
-    # print(f'time_traces_low = {data["time_traces_low"]}')
-    # print(f'event id = {data["event_id"]}')
-    # print(f'corsika shower id = {data["corsika_shower_id"]}')
-    # print(f'energy bin id = {data["energy_bin_id"]}')
-    # print(f"detector_positions_id = {data['detector_positions_id'][50]}")
-    # print(f"detector_positions_abs = {data['detector_positions_abs'][50][:, :, 0]}")
-    # print(f"detector_positions = {data['detector_positions'][50][:, :, 0].astype(np.float16)}")
-    # print(f"detector_positions_id = {data['detector_positions_abs'][50].shape}")
-    # print("xmax=", data["xmax"])
     if config is not None:
         print(f'event_id = {data["id_event"]}')
         print(f'corsika_shower_id = {data["id_corsika_shower"]}')
@@ -73,6 +62,6 @@ if __name__ == "__main__":
     # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT055402_gea.rufldf.dst.gz"
     dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT051419_gea.rufldf.dst.gz"
     # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
-
     # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
+
     test_parser(dst_file, print_read_data=True, add_xmax=True)
