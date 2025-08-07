@@ -24,10 +24,10 @@ from dstparser.xmax_reader import XmaxReader
 # ───────────────────────────────────────────────────────────────────────────────
 # Hard‑coded parameters (edit these paths if needed)
 DST_DIR         = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
-OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/17/parsed_events.h5")
+OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/20/parsed_events.h5")
 XMAX_DATA_DIR   = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
 XMAX_DATA_FILES = "*_xmax.txt"
-CPU_CORES       = 30
+CPU_CORES       = 48
 # ───────────────────────────────────────────────────────────────────────────────
 
 # Configuration flags
@@ -85,7 +85,7 @@ CONSTANT_KEYS = [
 
 
 # Hit‑ and trace‑field counts
-HIT_FIELDS   = 8   # [det_id, is_good, x, y, z, nfold, arrival_time, total_signal]
+HIT_FIELDS   = 10   # [det_id, is_good, x, y, z, nfold, arrival_time_low, arrival_time_up, total_signal_low, total_signal_up]
 TRACE_FIELDS = 2   # [low, up] per window
 
 
@@ -119,9 +119,11 @@ def build_event_array(data, idx):
         x, y, z = float(x_coords[j]), float(y_coords[j]), float(z_coords[j])
         is_good = float(goods[j])
         nf      = float(nfolds[j])
-        arrival = float((lows[j] + ups[j]) / 2.0)
-        total   = float((sl[j] + su[j]) / 2.0)
-        hits_flat.extend([did, is_good, x, y, z, nf, arrival, total])
+        arrival_low = float(lows[j])
+        arrival_up = float(ups[j])
+        total_low = float(sl[j])
+        total_up = float(su[j])
+        hits_flat.extend([did, is_good, x, y, z, nf, arrival_low, arrival_up, total_low, total_up])
     hits_arr = np.array(hits_flat, dtype=np.float64)
 
     # 3) time traces
