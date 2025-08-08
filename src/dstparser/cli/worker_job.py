@@ -9,6 +9,8 @@ from dstparser.cli.io import read_h5, save2hdf5
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
 from dstparser.cli.cli import parse_config
+from dstparser import append_to_hdf5, parse_dst_file_vlen
+import h5py
 
 
 def process_files(task_function, config):
@@ -154,6 +156,42 @@ def join_hdf5(ifiles, ofile, config):
     save2hdf5(acc_data, ofile)
 
 
+def dst_to_hdf5_vlen(ifiles, ofile, config):
+    xmax_reader, update_reader = init_xmax_reader(config, init_file=ifiles[0])
+
+    with h5py.File(ofile, "a") as f:
+        for file in tqdm(
+            ifiles, total=len(ifiles), desc=f"DST conversion for {Path(ofile).name}"
+        ):
+
+            if update_reader:
+                # Update xmax_reader if the directory of the file changes
+                xmax_reader = update_xmax_reader(xmax_reader, file)
+
+            data = parse_dst_file_vlen(
+                file,
+                xmax_reader=xmax_reader,
+                add_shower_params=True,
+                add_standard_recon=True,
+                config=config,
+            )
+
+            if data is None:
+                continue
+
+            append_to_hdf5(f, data)
+
+
+def join_hdf5_vlen(ifiles, ofile, config):
+    with h5py.File(ofile, "a") as f:
+
+        for ifile in tqdm(
+            ifiles, total=len(ifiles), desc=f"Joining files for {Path(ofile).name}"
+        ):
+            data = read_h5(ifile)
+            append_to_hdf5(f, data)
+
+
 def worker_job():
 
     config = parse_config(sys.argv[3])
@@ -162,6 +200,10 @@ def worker_job():
         process_files(dst_to_hdf5, config)
     elif sys.argv[2] == "join_hdf5":
         process_files(join_hdf5, config)
+    elif sys.argv[2] == "parse_dst_vlen":
+        process_files(dst_to_hdf5_vlen, config)
+    elif sys.argv[2] == "join_hdf5_vlen":
+        process_files(join_hdf5_vlen, config)
 
 
 if __name__ == "__main__":
