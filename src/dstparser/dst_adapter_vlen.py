@@ -259,11 +259,57 @@ def filter_offsets(mask, offsets):
     return np.concatenate(([0], np.cumsum(counts)))
 
 
+def remove_mismatch(expected, actual):
+    """
+    Return a boolean mask such that applying it to `actual` will give `expected`.
+    The order of elements in `expected` must appear in `actual` in the same order.
+    """
+    mask = np.zeros(len(actual), dtype=bool)
+    i = 0  # index in expected
+
+    for j in range(len(actual)):
+        if i >= len(expected):
+            break
+        if actual[j] == expected[i]:
+            mask[j] = True
+            i += 1
+
+    if i != len(expected):
+        raise ValueError("Could not match all elements of `expected` in `actual`")
+
+    if not np.array_equal(actual[mask], expected):
+        raise ValueError("Mismatch after masking: actual[mask] != expected")
+
+    return mask
+
+
 def detector_readings_flat(data, hits, waveforms):
     # for c = 3e10 cm/s:
     # to_nsec = 4 * 1000
     # The below is more correct for c = 2.998e10 cm/c,
     # to_nsec = 4002.7691424
+
+    # check if number folds from hits equal to number of waveforms
+    if np.sum(hits["rufptn_.nfold"]) != waveforms["rusdraw_.xxyy"].shape:
+        print("Missmatch between hits and waveforms!")
+
+        # Compute expected detector IDs from hits
+        expected_xxyy = np.repeat(hits["rufptn_.xxyy"], hits["rufptn_.nfold"])
+
+        # Get actual waveform detector IDs
+        actual_xxyy = waveforms["rusdraw_.xxyy"]
+
+        mask_matched = remove_mismatch(expected_xxyy, actual_xxyy)
+
+        waveforms_offsets = filter_offsets(mask_matched, waveforms["offsets"])
+
+        waveforms = {
+            key: value[mask_matched]
+            for key, value in waveforms.items()
+            if key != "offsets"
+        }
+
+        waveforms["offsets"] = waveforms_offsets
 
     # Filter for isgood > 2:
     hit_mask = hits["rufptn_.isgood"] > 2
