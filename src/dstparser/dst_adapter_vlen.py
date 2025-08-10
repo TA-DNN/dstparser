@@ -7,26 +7,13 @@ def corsika_id2mass(corsika_pid):
     return np.where(corsika_pid == 14, 1, corsika_pid // 100).astype(np.int32)
 
 
-def rec_coreposition_to_CLF_meters(core_position_rec, option):
-    detector_dist = 1200  # meters
-    clf_origin_x = 12.2435
-    clf_origin_y = 16.4406
-    if option == "x":
-        return detector_dist * (core_position_rec - clf_origin_x)
-    elif option == "y":
-        return detector_dist * (core_position_rec - clf_origin_y)
-    elif option == "dx":
-        return detector_dist * core_position_rec
-    elif option == "dy":
-        return detector_dist * core_position_rec
-
-
 def shower_params(data, events, xmax_data):
     # Shower related
     # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
     to_meters = 1e-2
     # events = dst_data["events"]
     data["mass_number"] = corsika_id2mass(events["rusdmc_.parttype"])
+    # in EeV
     data["energy"] = events["rusdmc_.energy"]
 
     if xmax_data is not None:
@@ -39,7 +26,6 @@ def shower_params(data, events, xmax_data):
             np.sin(events["rusdmc_.theta"]) * np.sin(events["rusdmc_.phi"] + np.pi),
             np.cos(events["rusdmc_.theta"]),
         ],
-        dtype=np.float32,
     ).transpose()
 
     # shower core in cm
@@ -52,7 +38,6 @@ def shower_params(data, events, xmax_data):
             ],
             axis=1,
         ),
-        dtype=np.float32,
     )
 
     return data
@@ -61,6 +46,11 @@ def shower_params(data, events, xmax_data):
 def standard_recon(
     data, events, include_combined_fit=False, include_fixed_curve_fit=False
 ):
+    # SD origin with respect to CLF origin in CLF frame, in [1200m] units
+    # benMC/sdanalysis_2019/dst2k-ta/inc/rufptn_dst.h
+    clf_origin_x = -12.2435
+    clf_origin_y = -16.4406
+
     # events = dst_data["events"]
     # Exempt from comments of cpp source code at:
     # /ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
@@ -68,21 +58,21 @@ def standard_recon(
     # // From now on, everyhting is relative to hhmmss.  Not useful in the event reconstruction.
     # Date of event
     # rusdraw_.yymmdd = 80916; // Event date year = 08, month = 09, day = 16
-    data["std_recon_yymmdd"] = events["rusdraw_.yymmdd"]
+    data["std_recon_yymmdd"] = events["rusdraw_.yymmdd"].astype(np.int64)
     # Time of event
     # rusdraw_.hhmmss = 1354;  // Event time, hour=00, minute=13, second = 54
-    data["std_recon_hhmmss"] = events["rusdraw_.hhmmss"]
+    data["std_recon_hhmmss"] = events["rusdraw_.hhmmss"].astype(np.int64)
     # Microseconds for the second
     # rusdraw_.usec = 111111
-    data["std_recon_usec"] = events["rusdraw_.usec"]
+    data["std_recon_usec"] = events["rusdraw_.usec"].astype(np.int64)
     # Number of waveforms for event for all detectors
-    data["std_recon_nofwf"] = events["rusdraw_.nofwf"]
+    data["std_recon_nofwf"] = events["rusdraw_.nofwf"].astype(np.int32)
     # number of SDs in space-time cluster
-    data["std_recon_nsd"] = events["rufptn_.nstclust"]
+    data["std_recon_nsd"] = events["rufptn_.nstclust"].astype(np.int32)
     # number of SDs in space cluster
-    data["std_recon_nsclust"] = events["rufptn_.nsclust"]
+    data["std_recon_nsclust"] = events["rufptn_.nsclust"].astype(np.int32)
     # number of hit SDs
-    data["std_recon_nhits"] = events["rufptn_.nhits"]
+    data["std_recon_nhits"] = events["rufptn_.nhits"].astype(np.int32)
     # number of SDs in space-time cluster & lie on the border of the array
     data["std_recon_nborder"] = events["rufptn_.nborder"]
     # total charge [VEM] of SDs in the space-time cluster, (lower & upper)
@@ -103,19 +93,21 @@ def standard_recon(
     # the number of degree of freedom of the LDF fit (= n - 3),
     # where "n" is the number of the SDs used for the LDF fit
     data["std_recon_ldf_ndof"] = events["rufldf_.ndof[0]"]
-    # core position (x, y) reconstructed by the LDF fit in CLF coordinate [m]
+    # core position (x, y) reconstructed by the LDF fit in CLF coordinate
+    # in 1200m units
     data["std_recon_shower_core"] = np.array(
         [
-            rec_coreposition_to_CLF_meters(events["rufldf_.xcore[0]"], option="x"),
-            rec_coreposition_to_CLF_meters(events["rufldf_.ycore[0]"], option="y"),
+            events["rufldf_.xcore[0]"] + clf_origin_x,
+            events["rufldf_.ycore[0]"] + clf_origin_y,
         ]
     ).transpose(1, 0)
 
     # uncertainty of the core position (x, y) reconstructed by the LDF fit
+    # in 1200m units
     data["std_recon_shower_core_err"] = np.array(
         [
-            rec_coreposition_to_CLF_meters(events["rufldf_.dxcore[0]"], option="dx"),
-            rec_coreposition_to_CLF_meters(events["rufldf_.dycore[0]"], option="dy"),
+            events["rufldf_.dxcore[0]"],
+            events["rufldf_.dycore[0]"],
         ]
     ).transpose(1, 0)
     # S800 (particle density at 800 m from the shower axis) [VEM m-2]
@@ -130,20 +122,18 @@ def standard_recon(
         # the number of degree of freedom of the LDF fit (= 2*n - 6),
         # where "n" is the number of the SDs used for the LDF fit
         data["std_recon_combined_ndof"] = events["rufldf_.ndof[1]"]
+        # in 1200m units
         data["std_recon_combined_shower_core"] = np.array(
             [
-                rec_coreposition_to_CLF_meters(events["rufldf_.xcore[1]"], option="x"),
-                rec_coreposition_to_CLF_meters(events["rufldf_.ycore[1]"], option="y"),
+                events["rufldf_.xcore[1]"] + clf_origin_x,
+                events["rufldf_.ycore[1]"] + clf_origin_y,
             ]
         ).transpose(1, 0)
+        # in 1200m units
         data["std_recon_combined_shower_core_err"] = np.array(
             [
-                rec_coreposition_to_CLF_meters(
-                    events["rufldf_.dxcore[1]"], option="dx"
-                ),
-                rec_coreposition_to_CLF_meters(
-                    events["rufldf_.dycore[1]"], option="dy"
-                ),
+                events["rufldf_.dxcore[1]"],
+                events["rufldf_.dycore[1]"],
             ]
         ).transpose(1, 0)
         data["std_recon_combined_s800"] = events["rufldf_.s800[1]"]
@@ -159,7 +149,6 @@ def standard_recon(
                 np.sin(theta) * np.sin(phi),
                 np.cos(theta),
             ],
-            dtype=np.float32,
         ).transpose()
 
         # uncertainty of the pointing direction [degree]
@@ -191,7 +180,6 @@ def standard_recon(
                 np.sin(theta) * np.sin(phi),
                 np.cos(theta),
             ],
-            dtype=np.float32,
         ).transpose()
 
         # uncertainty of the pointing direction [degree]
@@ -216,13 +204,9 @@ def standard_recon(
             np.sin(theta) * np.sin(phi),
             np.cos(theta),
         ],
-        dtype=np.float32,
     ).transpose()
     # uncertainty of the pointing direction [degree]
     # free curved parameter
-    # event_list[22] is zenith angle in deg
-    # event_list[24] is uncertainty zenith angle in deg
-    # event_list[25] is uncertainty azimuth angle in deg
 
     theta = np.deg2rad(events["rusdgeom_.theta[2]"])
     dtheta = events["rusdgeom_.dtheta[2]"]
@@ -408,7 +392,8 @@ def detector_readings_flat(data, hits, waveforms):
     # Reshape to the same shape as fadc
     vem = np.repeat(vem, hits["rufptn_.nfold"], axis=0)[:, :, None]
     # Convert FADC to VEMs
-    data["time_traces"] = waveforms["rusdraw_.fadc"] / vem
+    # Keep time traces in float32 to save space
+    data["time_traces"] = (waveforms["rusdraw_.fadc"] / vem).astype(np.float32)
     # Devision of flattened time_traces to events
     data["tt_offsets"] = waveforms["offsets"]
 

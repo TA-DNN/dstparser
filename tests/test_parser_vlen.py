@@ -38,9 +38,14 @@ def test_parser(dst_file, print_read_data=False, add_xmax=False):
 
     if print_read_data:
         print(f"\nConverted arrays:\n---")
+        print(f"{'Name':<35} {'Shape':<15} {'Dtype':<10} {'Min':<10} {'Max':<10}")
+        print("-" * 85)
         for key, val in data.items():
             if isinstance(val, np.ndarray):
-                print(key, val.shape)
+                # print(f"{key}{val.shape}, {val.dtype}, [{val.min()}, {val.max()}]")
+                print(
+                    f"{key:<35} {str(val.shape):<15} {str(val.dtype):<10} {val.min():<10.4g} {val.max():<10.4g}"
+                )
             else:
                 print(key, len(val), val)
 
