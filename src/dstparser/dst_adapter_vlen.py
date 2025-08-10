@@ -1,6 +1,7 @@
 import numpy as np
 from dstparser.dst_reader import read_dst_file
 from dstparser.dst_parsers_vlen import parse_dst_string
+from pathlib import Path
 
 
 def corsika_id2mass(corsika_pid):
@@ -17,7 +18,7 @@ def shower_params(data, events, xmax_data):
     data["energy"] = events["rusdmc_.energy"]
 
     if xmax_data is not None:
-        data["xmax"] = xmax_data(data["energy"])
+        data["xmax"] = xmax_data(data["energy"], data["mass_number"])
 
     # Theta and phi are in radians (see dst_fields.md)
     data["shower_axis"] = np.array(
@@ -407,6 +408,11 @@ def parse_dst_file_vlen(
     add_standard_recon=True,
     config=None,
 ):
+
+    if not Path(dst_file).exists():
+        print(f"File: {dst_file} doesn't exists")
+        return None
+
     dst_string = read_dst_file(dst_file)
     events, hits, waveforms, badsd = parse_dst_string(dst_string)
 

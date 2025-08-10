@@ -2,6 +2,7 @@ import numpy as np
 import re
 from pathlib import Path
 from dstparser.read_data import data_files
+from dstparser import rand_xmax
 import warnings
 
 
@@ -32,10 +33,8 @@ DXMAX_PARAMS = {
 
 def std_ta_energy_grid():
     """Return standard TA energy grid (mids and edges) in EeV."""
-    # Define 26 energy bins in EeV
-    # from 10^18 eV to 10^20.5 eV
-    # with 0.5 log10 step
-    mids = np.linspace(18, 20.5, 26)
+    # Define 51 mid point in log10 space with 0.1 step
+    mids = np.linspace(16, 21, 51)
     res = {"mids": 10 ** (mids - 18)}
 
     widths = mids[1:] - mids[:-1]
@@ -48,6 +47,9 @@ def std_ta_energy_grid():
         calc_mids, mids
     ), "Calculated midpoints do not match expected midpoints"
     res["edges"] = 10 ** (edges - 18)
+    # ta_indx is mapping from TA indexing (including 25) [0, 25] for (1, 20.5)
+    # [26, 39] (including 39) for (16.6, 17.9)
+    res["ta_indx"] = np.concatenate([np.arange(20, 46), np.arange(6, 21)])
 
     return res
 
@@ -94,7 +96,10 @@ class XmaxReader:
         self.file_idxs = np.concatenate(file_idx)
         self.all_xmax = np.concatenate(all_xmax)
 
-        self.energy_bin_centers = std_ta_energy_grid()["mids"]
+        std_grid = std_ta_energy_grid()
+
+        self.energy_bin_centers = std_grid["mids"]
+        self.ta_indx = std_grid["ta_indx"]
 
     def _extract_idx(self, file_name):
         pattern = r"DAT(\d+)_"
@@ -113,7 +118,8 @@ class XmaxReader:
         file_name = Path(file_name)
         file_idx = self._extract_idx(file_name)
         # Get energy at the bin center
-        en_bin_center = self.energy_bin_centers[int(file_idx[-2:])]
+        orig_indx = self.ta_indx[int(file_idx[-2:])]
+        en_bin_center = self.energy_bin_centers[orig_indx]
 
         # xmax0 is the xmax value for the energy at the bin center
         try:
@@ -124,10 +130,13 @@ class XmaxReader:
         self._xmax0 = xmax0
         self._en_bin_center = en_bin_center
 
-    def __call__(self, energies):
+    def __call__(self, energies, mass):
         # Getting xmax0 and scaling with energy according <Xmax>
         if (self._xmax0 == 0) or (self._xmax0 is None):
-            return np.zeros(energies.shape[0], dtype=np.float32)
+            print(f"Xmax is generated!")
+            # Generate random Xmax for model and energy
+            log10e = energies + 18
+            return rand_xmax(log10e, mass, model=self.model)
         else:
             return self._xmax0 + self.elongation_rate * np.log10(
                 energies / self._en_bin_center
