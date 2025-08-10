@@ -212,7 +212,7 @@ def main_job(data_base, db_files, log_dir, config):
         run_dstparser_job(
             len(data_base[0]),
             db_files[0],
-            task_name="parse_dst",
+            task_name="parse_dst_vlen",
             log_dir=log_dir,
             config=config,
         )
@@ -225,7 +225,7 @@ def main_job(data_base, db_files, log_dir, config):
         run_dstparser_job(
             len(data_base[1]),
             db_files[1],
-            task_name="join_hdf5",
+            task_name="join_hdf5_vlen",
             log_dir=log_dir,
             config=config,
         )
