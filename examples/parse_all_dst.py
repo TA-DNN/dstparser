@@ -24,10 +24,12 @@ from dstparser.xmax_reader import XmaxReader
 # ───────────────────────────────────────────────────────────────────────────────
 # Hard‑coded parameters (edit these paths if needed)
 DST_DIR         = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
-OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/20/parsed_events.h5")
+OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/complete_proton_dataset/0811.h5")
 XMAX_DATA_DIR   = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
 XMAX_DATA_FILES = "*_xmax.txt"
 CPU_CORES       = 48
+EVENTS_PER_FILE = 1_000_000  # max events per output HDF5
+
 # ───────────────────────────────────────────────────────────────────────────────
 
 # Configuration flags
@@ -200,16 +202,36 @@ def main():
     xmax_reader = XmaxReader(data_dir=XMAX_DATA_DIR, glob_pattern=XMAX_DATA_FILES)
 
     # 4) open HDF5 and start filling
+        # 4) open HDF5 and start filling (multi-file, capped per file)
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(OUT_PATH, 'w') as f:
-        evs_grp = f.create_group('events')
-        global_idx = 0
 
+    def _part_path(i: int) -> Path:
+        return OUT_PATH.with_name(f"{OUT_PATH.stem}_part{i:03d}{OUT_PATH.suffix}")
+
+    file_idx = 1
+    current_path = _part_path(file_idx)
+    f = h5py.File(current_path, 'w')
+    evs_grp = f.create_group('events')
+    events_in_file = 0
+    global_idx = 0
+    created_paths = [current_path]
+
+    try:
         # 5) parallel processing
         args = [(dst_file, xmax_reader) for dst_file in dst_files]
         with ProcessPoolExecutor(max_workers=CPU_CORES) as executor:
             for _, events in tqdm(executor.map(process_file, args), total=N, desc="Files"):
                 for ev_data, ev_attrs in events:
+                    # roll over to a new file if we've hit the per-file cap
+                    if events_in_file >= EVENTS_PER_FILE:
+                        f.close()
+                        file_idx += 1
+                        current_path = _part_path(file_idx)
+                        f = h5py.File(current_path, 'w')
+                        evs_grp = f.create_group('events')
+                        events_in_file = 0
+                        created_paths.append(current_path)
+
                     grp = evs_grp.create_group(f'event_{global_idx:06d}')
                     ds  = grp.create_dataset(
                         'event_data',
@@ -219,9 +241,19 @@ def main():
                     )
                     for k, v in ev_attrs.items():
                         ds.attrs[k] = v
-                    global_idx += 1
 
-        print(f"Wrote {global_idx:,} events to {OUT_PATH}")
+                    global_idx += 1
+                    events_in_file += 1
+    finally:
+        f.close()
+
+    if len(created_paths) == 1:
+        print(f"Wrote {global_idx:,} events to {created_paths[0]}")
+    else:
+        print(f"Wrote {global_idx:,} events across {len(created_paths)} files:")
+        for p in created_paths:
+            print(f"  - {p}")
+
 
 
 if __name__ == "__main__":

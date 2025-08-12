@@ -87,8 +87,8 @@ def _process_time_traces(
     - Splits waveform into 'up' and 'low' traces, calibrates by FADC/VEM factors.
     - If avg_traces: returns average trace, else returns both traces.
     """
-    ttrace_up = wform_chunk[::2] / fadc_per_vem_up
-    ttrace_low = wform_chunk[1::2] / fadc_per_vem_low
+    ttrace_up = wform_chunk[1::2] / fadc_per_vem_low
+    ttrace_low = wform_chunk[::2] / fadc_per_vem_up
     if avg_traces:
         return (ttrace_low + ttrace_up) / 2
     return ttrace_low, ttrace_up
@@ -245,74 +245,70 @@ def cut_events(
     Filters and aligns event and waveform data for each event.
 
     Steps:
-    1. Exclude coincidence signals (event[1] <= 2).
-    2. Optionally keep only the first hit per unique detector (if max_hits == 1).
-    3. Filter and order waveform columns to match the filtered event hits.
-    4. Optionally limit the number of FADC windows per hit (if max_windows != 'all').
-    5. Adjust the number of FADC rows to match the number of windows kept.
-
-    Returns:
-        - Filtered event array (shape: 12 x n_hits)
-        - Filtered waveform array (shape: (256 * n_windows) x n_hits)
+      1) Drop coincidence signals (event[1] <= 2)
+      2) Optionally keep only the first hit per unique detector (if max_hits == 1)
+      3) Align waveform columns to hits *hit-by-hit* using nfolds (robust to duplicate IDs)
+      4) Optionally cap windows per hit (if max_windows != 'all'), preserving per-hit order
+      5) Trim FADC rows to the number of windows actually kept
     """
-    # Step 1: Exclude coincidence signals (where event[1] <= 2)
+    # -- Step 1: drop coincidences
     coincidence_mask = event[1] > 2
     event = event[:, coincidence_mask]
     if event.shape[1] == 0:
         return event, np.empty((wform.shape[0] - 3, 0), dtype=wform.dtype)
 
-    # Step 2: Filter hits based on max_hits
+    # -- Step 2: optionally keep first hit per unique detector
     if max_hits == 1:
-        # Keep only the first hit for each unique detector
         sdid = event[0]
         _, first_indices = np.unique(sdid, return_index=True)
         event = event[:, first_indices]
 
-    # Step 3: Filter and order wform to match the final event array
-    wform_xxyy = wform[0, :].astype(np.int32)
-    event_xxyy = event[0, :].astype(np.int32)
-    wform_mask = np.isin(wform_xxyy, event_xxyy)
-    wform = wform[:, wform_mask]
-    wform_xxyy_filtered = wform[0, :].astype(np.int32)
-    ordered_wform_indices = []
-    for hit_id in event_xxyy:
-        indices = np.where(wform_xxyy_filtered == hit_id)[0]
-        if len(indices) > 0:
-            ordered_wform_indices.extend(indices)
-    wform = wform[:, ordered_wform_indices]
+    # -- Step 3: per-hit, nfold-aware alignment (handles duplicate detector IDs)
+    event_ids = event[0].astype(np.int32)
+    nfolds    = event[11].astype(int)
 
-    # Step 4: Filter windows based on max_windows
+    # keep only waveforms whose det-id appears in event
+    wform_ids_full = wform[0, :].astype(np.int32)
+    keep_mask = np.isin(wform_ids_full, event_ids)
+    wform = wform[:, keep_mask]
+    wform_ids = wform[0, :].astype(np.int32)
+
+    # queue of column indices for each det-id (in original wform order)
+    id_to_queue: Dict[int, List[int]] = {}
+    for j, sid in enumerate(wform_ids):
+        id_to_queue.setdefault(sid, []).append(j)
+
+    # build ordered column list hit-by-hit, consuming exactly nfold windows per hit
+    ordered_cols: List[int] = []
+    for sid, k in zip(event_ids, nfolds):
+        q = id_to_queue.get(sid, [])
+        take = q[:k]          # take this hit's windows
+        ordered_cols.extend(take)
+        id_to_queue[sid] = q[k:]  # consume for the next hit of the same id
+
+    wform = wform[:, ordered_cols]
+
+    # -- Step 4: optionally cap windows per hit *after* alignment
     if max_windows != "all":
-        # Only keep the specified number of windows for each hit
-        wform_col_mask = []
-        unique_ids, counts = np.unique(wform[0, :].astype(np.int32), return_counts=True)
-        wform_nfolds = dict(zip(unique_ids, counts))
-        windows_to_keep = np.minimum(event[11].astype(int), int(max_windows))
-        event_id_to_windows = dict(zip(event[0].astype(np.int32), windows_to_keep))
-        current_counts = {hit_id: 0 for hit_id in event_id_to_windows}
-        for hit_id in wform[0, :].astype(np.int32):
-            if current_counts[hit_id] < event_id_to_windows[hit_id]:
-                wform_col_mask.append(True)
-                current_counts[hit_id] += 1
-            else:
-                wform_col_mask.append(False)
-        wform = wform[:, wform_col_mask]
+        cap = int(max_windows)
+        starts = np.concatenate(([0], np.cumsum(nfolds[:-1])))
+        keep_cols = np.zeros(wform.shape[1], dtype=bool)
+        for i, k in enumerate(nfolds):
+            m = min(k, cap)
+            keep_cols[starts[i] : starts[i] + m] = True
+        wform = wform[:, keep_cols]
+        max_windows_actually_kept = cap
+    else:
+        # when keeping all windows, rows should cover the actual max nfold
+        max_windows_actually_kept = int(np.max(nfolds)) if event.shape[1] > 0 else 1
 
-    # Step 5: Adjust number of FADC rows based on the windows we actually kept
-    max_windows_actually_kept = 1
-    if wform.shape[1] > 0:
-        if max_windows == "all":
-            event_mask_with_wform = np.isin(event[0], np.unique(wform[0, :].astype(np.int32)))
-            if np.any(event_mask_with_wform):
-                max_windows_actually_kept = np.max(event[11, event_mask_with_wform].astype(int))
-        else:
-            max_windows_actually_kept = int(max_windows)
-
+    # -- Step 5: trim FADC rows accordingly (keep 3 metadata rows)
     num_fadc_rows = 256 * max_windows_actually_kept
     wform = wform[: 3 + num_fadc_rows, :]
 
-    # Remove the first 3 rows (metadata), return only waveform data
+    # drop metadata rows from return value
     return event, wform[3:, :]
+
 
 
 def center_tile(
