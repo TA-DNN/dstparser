@@ -352,7 +352,7 @@ def detector_readings_flat(data, hits, waveforms):
     )
 
     # SD coordinates in CLF frame [1200m units]
-    # Probably for TAx4 it is in [2080m units]
+    # It seems that 1200m is used for TAx4
     # Looks like reasonable choice (not very large magnitude)
     data["detector_positions"] = np.stack(
         [

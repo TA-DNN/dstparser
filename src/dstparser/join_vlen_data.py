@@ -22,13 +22,13 @@ def append_to_memstore(memstore, data_dict):
     for key, array in data_dict.items():
         arr = np.asarray(array)
 
+        if "offset" in key:
+            assert (
+                len(arr) > 0 and arr[0] == 0
+            ), f"Offset array '{key}' must start with 0, got {arr[0] if len(arr) > 0 else 'empty array'}"
+
         if key not in memstore:
-            # Just store it directly (but process offsets below)
-            if "offset" in key:
-                # Offset array should start with 0, drop it
-                memstore[key] = arr[1:].copy()
-            else:
-                memstore[key] = arr.copy()
+            memstore[key] = arr.copy()
         else:
             if "offset" in key:
                 last_val = memstore[key][-1]
@@ -58,6 +58,11 @@ def append_to_hdf5(h5file, data_dict):
     """
     for key, array in data_dict.items():
         arr = np.asarray(array)
+        if "offset" in key:
+            assert (
+                len(arr) > 0 and arr[0] == 0
+            ), f"Offset array '{key}' must start with 0, got {arr[0] if len(arr) > 0 else 'empty array'}"
+
         if key not in h5file:
             # create a new resizable dataset
             maxshape = (None, *arr.shape[1:])
