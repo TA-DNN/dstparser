@@ -1,4 +1,5 @@
 import numpy as np
+import json
 
 
 def append_to_memstore(memstore, data_dict):
@@ -57,7 +58,14 @@ def append_to_hdf5(h5file, data_dict):
         Mapping of dataset names to new data chunks.
     """
     for key, array in data_dict.items():
-        arr = np.asarray(array)
+        if isinstance(array, dict):
+            arr = array["data"]
+            attr = array["info"]
+        else:
+            arr = array
+            attr = None
+
+        arr = np.asarray(arr)
         if "offset" in key:
             assert (
                 len(arr) > 0 and arr[0] == 0
@@ -66,13 +74,15 @@ def append_to_hdf5(h5file, data_dict):
         if key not in h5file:
             # create a new resizable dataset
             maxshape = (None, *arr.shape[1:])
-            h5file.create_dataset(
+            dataset = h5file.create_dataset(
                 key,
                 data=arr,
                 maxshape=maxshape,
                 dtype=arr.dtype,
                 chunks=True,
             )
+            if attr is not None:
+                dataset.attrs["info"] = json.dumps(attr)
         else:
             ds = h5file[key]
             if "offset" in key:
