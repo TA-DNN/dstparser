@@ -23,8 +23,11 @@ from dstparser.xmax_reader import XmaxReader
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Hard‑coded parameters (edit these paths if needed)
+# DST_DIR         = Path("/home/marktsai321/TA_DNN/temp/0813/temp_dst_files")
+# OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/0813/temp_h5_files/03.h5")
+# XMAX_DATA_DIR   = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
 DST_DIR         = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
-OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/complete_proton_dataset/0811.h5")
+OUT_PATH        = Path("/home/marktsai321/TA_DNN/temp/test_outputs/new_proton_dataset/completedataset.h5")
 XMAX_DATA_DIR   = Path("/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo")
 XMAX_DATA_FILES = "*_xmax.txt"
 CPU_CORES       = 48
@@ -187,8 +190,9 @@ def main():
         match = re.search(r"DAT\d{4}(\d{2})", f.name)
         if match:
             energy_bin = int(match.group(1))
-            if 0 <= energy_bin <= 25:
-                filtered_files.append(f)
+            # if 0 <= energy_bin <= 25:
+            #     filtered_files.append(f)
+            filtered_files.append(f)
     dst_files = filtered_files
 
     N = len(dst_files)

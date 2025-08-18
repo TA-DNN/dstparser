@@ -107,7 +107,7 @@ def shower_params(
     data["mass_number"] = corsika_id2mass(event_list[0])
     data["energy"] = event_list[1]
     if xmax_data is not None:
-        data["xmax"] = xmax_data(data["energy"])
+        data["xmax"] = xmax_data(data["energy"], data["mass_number"])
     data["shower_axis"] = np.array(
         [
             np.sin(event_list[2]) * np.cos(event_list[3] + np.pi),
