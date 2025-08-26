@@ -238,9 +238,11 @@ def standard_recon(
 
 
 def filter_offsets(mask, offsets):
-    # 1) compute counts per segment
-    counts = np.add.reduceat(mask.astype(int), offsets[:-1])
-    # 2) build new offsets
+    # cumulative sum of mask
+    cumsum = np.concatenate(([0], np.cumsum(mask.astype(int))))
+    # counts per segment (handles empty segments)
+    counts = cumsum[offsets[1:]] - cumsum[offsets[:-1]]
+    # build new offsets
     return np.concatenate(([0], np.cumsum(counts)))
 
 
@@ -286,11 +288,6 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
             f'  with n={num_bad_wf} waveform out of {waveforms["rusdraw_.xxyy"].shape[0]} not corresonding to any hit'
             f' ({num_bad_wf/(waveforms["rusdraw_.xxyy"].shape[0])*100:.6g}%)'
         )
-        # print(hits["rufptn_.nfold"], hits["rufptn_.nfold"].shape)
-        # print(waveforms["rusdraw_.xxyy"], waveforms["rusdraw_.xxyy"].shape)
-
-        # for ii, wxxyy in enumerate(waveforms["rusdraw_.xxyy"]):
-        #     print(ii, wxxyy)
 
         # Compute expected detector IDs from hits
         expected_xxyy = np.repeat(hits["rufptn_.xxyy"], hits["rufptn_.nfold"])
@@ -299,8 +296,6 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
         actual_xxyy = waveforms["rusdraw_.xxyy"]
 
         mask_matched = remove_mismatch(expected_xxyy, actual_xxyy)
-        # print(waveforms["rusdraw_.xxyy"][~mask_matched])
-        print(np.where(~mask_matched)[0].shape)
 
         waveforms_offsets = filter_offsets(mask_matched, waveforms["offsets"])
 
@@ -314,7 +309,6 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
 
     # Filter for isgood > 2:
     hit_mask = hits["rufptn_.isgood"] > 2
-    # print(f"hit_mask.shape={hit_mask.shape}")
     # Repeat hit_mask nfold times
     wf_mask = np.repeat(hit_mask, hits["rufptn_.nfold"])
 
@@ -329,7 +323,7 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
     if not all(
         v.shape[0] == hits["offsets"][-1] for k, v in hits.items() if k != "offsets"
     ):
-        print(f"File {dst_file} has problem with offsets")
+        print(f"File {dst_file} has a problem with offsets")
         print(f"Return None")
         return None
 
