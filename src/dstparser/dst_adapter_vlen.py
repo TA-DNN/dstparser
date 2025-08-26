@@ -268,7 +268,7 @@ def remove_mismatch(expected, actual):
     return mask
 
 
-def detector_readings_flat(data, hits, waveforms):
+def detector_readings_flat(dst_file, data, hits, waveforms):
     # for c = 3e10 cm/s:
     # to_nsec = 4 * 1000
     # The below is more correct for c = 2.998e10 cm/c,
@@ -276,7 +276,21 @@ def detector_readings_flat(data, hits, waveforms):
 
     # check if number folds from hits equal to number of waveforms
     if np.sum(hits["rufptn_.nfold"]) != waveforms["rusdraw_.xxyy"].shape:
-        print("Missmatch between hits and waveforms!")
+        num_bad_wf = int(
+            waveforms["rusdraw_.xxyy"].shape[0] - np.sum(hits["rufptn_.nfold"])
+        )
+
+        print(
+            "Missmatch between hits and waveforms in:\n"
+            f"  {dst_file}\n"
+            f'  with n={num_bad_wf} waveform out of {waveforms["rusdraw_.xxyy"].shape[0]} not corresonding to any hit'
+            f' ({num_bad_wf/(waveforms["rusdraw_.xxyy"].shape[0])*100:.6g}%)'
+        )
+        # print(hits["rufptn_.nfold"], hits["rufptn_.nfold"].shape)
+        # print(waveforms["rusdraw_.xxyy"], waveforms["rusdraw_.xxyy"].shape)
+
+        # for ii, wxxyy in enumerate(waveforms["rusdraw_.xxyy"]):
+        #     print(ii, wxxyy)
 
         # Compute expected detector IDs from hits
         expected_xxyy = np.repeat(hits["rufptn_.xxyy"], hits["rufptn_.nfold"])
@@ -285,6 +299,8 @@ def detector_readings_flat(data, hits, waveforms):
         actual_xxyy = waveforms["rusdraw_.xxyy"]
 
         mask_matched = remove_mismatch(expected_xxyy, actual_xxyy)
+        # print(waveforms["rusdraw_.xxyy"][~mask_matched])
+        print(np.where(~mask_matched)[0].shape)
 
         waveforms_offsets = filter_offsets(mask_matched, waveforms["offsets"])
 
@@ -298,6 +314,7 @@ def detector_readings_flat(data, hits, waveforms):
 
     # Filter for isgood > 2:
     hit_mask = hits["rufptn_.isgood"] > 2
+    # print(f"hit_mask.shape={hit_mask.shape}")
     # Repeat hit_mask nfold times
     wf_mask = np.repeat(hit_mask, hits["rufptn_.nfold"])
 
@@ -308,6 +325,14 @@ def detector_readings_flat(data, hits, waveforms):
     # Filter hits
     hits = {key: value[hit_mask] for key, value in hits.items() if key != "offsets"}
     hits["offsets"] = hits_offsets
+
+    if not all(
+        v.shape[0] == hits["offsets"][-1] for k, v in hits.items() if k != "offsets"
+    ):
+        print(f"File {dst_file} has problem with offsets")
+        print(f"Return None")
+        return None
+
     hits["wf_offsets"] = np.concatenate(([0], np.cumsum(hits["rufptn_.nfold"])))
 
     # Filter waveforms
@@ -432,7 +457,7 @@ def parse_dst_file_vlen(
     if add_standard_recon:
         data = standard_recon(data, events)
 
-    data = detector_readings_flat(data, hits, waveforms)
+    data = detector_readings_flat(dst_file, data, hits, waveforms)
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
