@@ -246,26 +246,55 @@ def filter_offsets(mask, offsets):
     return np.concatenate(([0], np.cumsum(counts)))
 
 
-def remove_mismatch(expected, actual):
+# 'remove_mismatch' is numba optimized version
+# Acceleration is 24 ms/0.143 ms = 168 is cool
+# but it is overkill for 1.5 sec detector_readings_flat
+# total execution time
+# import numba
+# @numba.njit
+def remove_mismatch(expected, actual, hit_offsets, wf_offsets):
     """
     Return a boolean mask such that applying it to `actual` will give `expected`.
     The order of elements in `expected` must appear in `actual` in the same order.
     """
-    mask = np.zeros(len(actual), dtype=bool)
-    i = 0  # index in expected
+    mask = np.zeros(len(actual), dtype=np.bool_)
 
-    for j in range(len(actual)):
-        if i >= len(expected):
-            break
-        if actual[j] == expected[i]:
-            mask[j] = True
-            i += 1
+    # One should consider boundaries of events,
+    # otherwise "cross event" misidentifications occurs, i.e.
+    # elements of "expected" in one event will be identified with
+    # elements of "actual" in another event
+    for evt in range(len(hit_offsets) - 1):
+        e0, e1 = hit_offsets[evt], hit_offsets[evt + 1]
+        a0, a1 = wf_offsets[evt], wf_offsets[evt + 1]
+        exp = expected[e0:e1]
+        act = actual[a0:a1]
 
-    if i != len(expected):
-        raise ValueError("Could not match all elements of `expected` in `actual`")
+        if len(exp) == 0:
+            continue
 
-    if not np.array_equal(actual[mask], expected):
-        raise ValueError("Mismatch after masking: actual[mask] != expected")
+        i = 0
+        for j in range(len(act)):
+            if act[j] == exp[i]:
+                mask[a0 + j] = True
+                i += 1
+                if i == len(exp):
+                    break
+
+        if i != len(exp):
+            raise ValueError(
+                f"Event {evt}: Could not match all elements of `expected` in `actual`"
+            )
+
+        # Verify correctness: actual[mask] == expected for this event
+        # Loop for numba.njit
+        k = 0
+        for j in range(len(act)):
+            if mask[a0 + j]:
+                if act[j] != exp[k]:
+                    raise ValueError(
+                        f"Event {evt}: Mismatch after masking at position {k}"
+                    )
+                k += 1
 
     return mask
 
@@ -295,8 +324,19 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
         # Get actual waveform detector IDs
         actual_xxyy = waveforms["rusdraw_.xxyy"]
 
-        mask_matched = remove_mismatch(expected_xxyy, actual_xxyy)
+        offs = hits["offsets"]
+        nfold = hits["rufptn_.nfold"]
+        if offs[0] != 0 or offs[-1] != len(nfold) or np.any(np.diff(offs) < 0):
+            raise ValueError("invalid offsets")
 
+        cs = np.concatenate(([0], np.cumsum(nfold)))  # prefix sums
+        counts_per_event = cs[offs[1:]] - cs[offs[:-1]]  # sums per [start:end)
+        hit_offsets = np.concatenate(([0], np.cumsum(counts_per_event)))
+
+        mask_matched = remove_mismatch(
+            expected_xxyy, actual_xxyy, hit_offsets, waveforms["offsets"]
+        )
+                
         waveforms_offsets = filter_offsets(mask_matched, waveforms["offsets"])
 
         waveforms = {
