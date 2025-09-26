@@ -4,6 +4,7 @@ from dstparser.dst_adapter_tax4 import parse_dst_file_tax4
 from dstparser.dst_adapter_vlen import parse_dst_file_vlen
 from dstparser.join_vlen_data import append_to_hdf5
 from dstparser.xmax_auger import rand_xmax
+from dstparser.h5dst.h5dst import H5DST, MultiH5DST
 
 __version__ = version("dstparser")
 
