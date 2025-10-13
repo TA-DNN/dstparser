@@ -118,7 +118,7 @@ class MultiH5DST:
         self.filenames = filenames
         self.files = [h5py.File(fn, "r") for fn in filenames]
 
-        self.event_counts = [f["energy"].shape[0] for f in self.files]
+        self.event_counts = [f["std_recon_energy"].shape[0] for f in self.files]
         self.hit_counts = [f["arrival_times"].shape[0] for f in self.files]
         self.tt_counts = [f["time_traces"].shape[0] for f in self.files]
 
@@ -143,7 +143,7 @@ class MultiH5DST:
             elif isinstance(obj, h5py.Dataset):
                 shape0 = obj.shape[0]
 
-                if shape0 == self.files[0]["energy"].shape[0]:
+                if shape0 == self.files[0]["std_recon_energy"].shape[0]:
                     self._data[name[1:]] = EventLevel(self, name[1:])
 
         walk("", self.files[0]["/"], indent=-1)
