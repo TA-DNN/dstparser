@@ -1,24 +1,15 @@
 # Root path to the directory with data
-# root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM"
 root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019"
-dst_reader = "sditerator_no_standard_recon.run"
-dst_reader_add_standard_recon = "sditerator_add_standard_recon_v2.run"
-dst_reader_all_events = "sditerator_printAll.run"
 
+# `sditerator` executable file
+dst_reader = "sditerator_add_standard_recon_v2.run"
+
+# script with environment variables
 sd_analysis_env = "sdanalysis_env.sh"
-openssl10_alma9 = "/ceph/work/SATORI/projects/TA-ASIoP/benMC/libs_alma9/openssl10"
-openssl10_rocky_linux = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/benMC/libs_rocky_linux/openssl10"
-)
 
-# Data for xmax
-xmax_data_files = "DAT*_xmax.txt"
-xmax_data_dir_prot = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
-    "qgsii04proton/080417_160603/Em1/"
-)
-
-xmax_data_dir_fe = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
-    "qgsii04iron/080417_160603/Em1/"
-)
+# Patch (workaround) to provide openssl10 library for old version of root on
+# alma9 and rocky_linux that do not contain `openssl10`
+# It should be deleted when proper way to install is found
+openssl10_fix_dir = "/ceph/work/SATORI/projects/TA-ASIoP/benMC"
+openssl10_alma9 = openssl10_fix_dir + "/libs_alma9/openssl10"
+openssl10_rocky_linux = openssl10_fix_dir + "/libs_rocky_linux/openssl10"
