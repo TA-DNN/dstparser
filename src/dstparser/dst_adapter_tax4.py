@@ -33,7 +33,7 @@ def shower_params(data, dst_lists, xmax_data):
     data["energy"] = event_list[1]
 
     if xmax_data is not None:
-        data["xmax"] = xmax_data(data["energy"])
+        data["xmax"] = xmax_data(data["energy"], data["mass_number"])
 
     data["shower_axis"] = np.array(
         [
@@ -236,9 +236,9 @@ def cut_events(event, wform):
     # the y-coordinate and the last two digits are the x-coordinate.
     # We need to change from yyxx to xxyy format for further processing
     event[0, :] = ((event[0, :] % 100) * 100 + (event[0, :] // 100)).astype(np.int32)
-    
+
     # print("event shape:", event.shape)
-    
+
     # for i, e in enumerate(event):
     #     print(i, e)
 
@@ -246,9 +246,9 @@ def cut_events(event, wform):
     u, c = np.unique(sdid, return_counts=True)
     dup = u[c > 1]
     mask = sdid == sdid
-    
+
     # print(f"duplicate SD IDs: {dup}")
-    
+
     for el in dup:
         mask[np.where(sdid == el)[0][1:]] = False
 
@@ -274,13 +274,12 @@ def center_tile(event, ntile):
 
     # ix and iy as one array [ix, iy]
     ixy = np.array([event[0] // 100, event[0] % 100]).astype(np.int32)
-    
-    
+
     # print(f"ix = {ixy}")
     # print(f"event[6]= {event[6]}")
     # print(f"event[7]= {event[7]}")
     # print(f"event[8]= {event[8]}")
-    
+
     # Indicies of central detector ix0, iy0
     ixy0 = np.copy(ixy[:, max_signal_idx]) - (ntile - 1) // 2
     ixy -= ixy0[:, np.newaxis]
@@ -343,36 +342,32 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt, hits_positions, hits_ids)
     x += ixy0[0]
     y += ixy0[1]
     xy_code = x * 100 + y
-    
+
     all_ids = hits_ids
     all_pos = hits_positions
 
     # masks: (n_hits, tile_size, tile_size)
     masks = all_ids[:, None, None] == xy_code[None, :, :]
-    best_idx = np.argmax(masks, axis=0)           # index into your hits array
-    exists   = masks.any(axis=0)
+    best_idx = np.argmax(masks, axis=0)  # index into your hits array
+    exists = masks.any(axis=0)
     best_idx = np.where(exists, best_idx, -1)
 
     # pull out the IDs & positions per cell
-    cell_ids  = np.where(exists,
-                         all_ids[best_idx],
-                         0)
-    cell_pos  = np.where(exists[...,None],
-                         all_pos[best_idx],
-                         0.0)
+    cell_ids = np.where(exists, all_ids[best_idx], 0)
+    cell_pos = np.where(exists[..., None], all_pos[best_idx], 0.0)
 
     # good/bad
-    good   = ~np.isin(cell_ids, badsd)
+    good = ~np.isin(cell_ids, badsd)
     status = good & exists
 
     # write into data
-    data["detector_positions"][ievt]     = cell_pos * to_meters
+    data["detector_positions"][ievt] = cell_pos * to_meters
     data["detector_positions_abs"][ievt] = cell_pos * to_meters
-    data["detector_positions_id"][ievt]  = cell_ids
+    data["detector_positions_id"][ievt] = cell_ids
 
     data["detector_states"][ievt] = status
     data["detector_exists"][ievt] = exists
-    data["detector_good"][ievt]   = good
+    data["detector_good"][ievt] = good
     return data
 
 
@@ -422,15 +417,12 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         # calculate each hit’s absolute (x,y,z) in cm from your event arrays:
         # event[6], event[7], event[8] are in units of 1200 m (i.e. detector_dist),
         # so multiply back to meters, then to cm:
-        detector_dist = 1200.0    # [m]
+        detector_dist = 1200.0  # [m]
         # stack into shape (n_hits,3) in **cm**:
-        hits_m = np.vstack([event[6],
-                            event[7],
-                            event[8]]).T * detector_dist
+        hits_m = np.vstack([event[6], event[7], event[8]]).T * detector_dist
         hits_cm = hits_m * 100.0
         hit_ids = event[0].astype(int)
-        
-        
+
         data = tile_positions(ixy0, ntile, badsd, data, ievt, hits_cm, hit_ids)
         # Shift and normalize detector positions and shower cores
         data = tile_normalization(data, ievt)

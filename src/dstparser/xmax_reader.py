@@ -55,7 +55,7 @@ def std_ta_energy_grid():
 
 
 class XmaxReader:
-    def __init__(self, data_dir, glob_pattern, model="QGSJetII-04"):
+    def __init__(self, data_dir, glob_pattern="**/DAT*_xmax.txt", model="QGSJetII-04"):
 
         self.data_dir = data_dir
         self.glob_pattern = glob_pattern
