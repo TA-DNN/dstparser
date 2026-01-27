@@ -55,11 +55,12 @@ def std_ta_energy_grid():
 
 
 class XmaxReader:
-    def __init__(self, data_dir, glob_pattern, model="QGSJetII-04"):
+    def __init__(self, data_dir, glob_pattern, model="QGSJetII-04", generate_all=False):
 
         self.data_dir = data_dir
         self.glob_pattern = glob_pattern
         self.model = model
+        self.generate_all = generate_all
 
         self.empty = False
         if self.data_dir is None:
@@ -133,7 +134,8 @@ class XmaxReader:
     def __call__(self, energies, mass):
         # Getting xmax0 and scaling with energy according <Xmax>
         if (self._xmax0 == 0) or (self._xmax0 is None):
-            print(f"Xmax is generated!")
+            if not self.generate_all:
+                print(f"Xmax is generated!")
             # Generate random Xmax for model and energy
             log10e = energies + 18
             return rand_xmax(log10e, mass, model=self.model)

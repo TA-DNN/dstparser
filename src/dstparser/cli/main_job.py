@@ -7,6 +7,7 @@ from pathlib import Path
 from collections import defaultdict
 from dstparser.cli.slurm import run_slurm_job
 from dstparser.cli.cli import parse_config
+from dstparser.cli.group_files import create_task_db
 import re
 
 
@@ -95,7 +96,7 @@ def run_dstparser_job(max_jobs, db_file, task_name, log_dir, config):
     )
 
 
-def generate_db(config):
+def generate_db_old(config):
 
     output_dir = Path(config.output_dir)
     db_files = [output_dir / "jobs_pass1.json", output_dir / "jobs_pass2.json"]
@@ -153,6 +154,40 @@ def generate_db(config):
     return data_base, db_files
 
 
+def generate_db(config):
+
+    output_dir = Path(config.output_dir)
+    db_files = {
+        "temp": output_dir / "jobs_pass1.json",
+        "final": output_dir / "jobs_pass2.json",
+    }
+
+    data_base = {}
+    for key, db_file in db_files.items():
+        if db_file.exists():
+            with open(db_file, "r") as f:
+                data_base[key] = json.load(f)
+
+    if len(data_base) == 2:
+        return data_base, db_files
+
+    data_base = create_task_db(
+        data_dirs=config.data_dirs,
+        data_globs=config.data_globs,
+        output_dir=config.output_dir,
+        temp_ngroups=config.temp_ngroups,
+        temp_njobs=config.temp_njobs,
+        final_ngroups=config.final_ngroups,
+        final_njobs=config.final_njobs,
+    )
+
+    for key, db_file in db_files.items():
+        with open(db_file, "w") as f:
+            json.dump(data_base[key], f, indent=4)
+
+    return data_base, db_files
+
+
 def wait_until_ready(temp_files, log_dir):
     max_time_to_wait = 2 * 3600  # in sec
     check_every = 10  # sec
@@ -195,7 +230,7 @@ def wait_until_ready(temp_files, log_dir):
 def main_job(data_base, db_files, log_dir, config):
     # Find temp files
     temp_files = []
-    for task in data_base[0].values():
+    for task in data_base["temp"].values():
         for group in task.values():
             temp_files.append(group["output_file"])
 
@@ -210,8 +245,8 @@ def main_job(data_base, db_files, log_dir, config):
     # Launch slurm if temp files not ready
     if not temp_files_ready:
         run_dstparser_job(
-            len(data_base[0]),
-            db_files[0],
+            len(data_base["temp"]),
+            db_files["temp"],
             task_name="parse_dst_vlen",
             log_dir=log_dir,
             config=config,
@@ -223,8 +258,8 @@ def main_job(data_base, db_files, log_dir, config):
 
     if all_ready:
         run_dstparser_job(
-            len(data_base[1]),
-            db_files[1],
+            len(data_base["final"]),
+            db_files["final"],
             task_name="join_hdf5_vlen",
             log_dir=log_dir,
             config=config,

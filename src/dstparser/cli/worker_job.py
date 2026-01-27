@@ -171,8 +171,8 @@ def dst_to_hdf5_vlen(ifiles, ofile, config):
             data = parse_dst_file_vlen(
                 file,
                 xmax_reader=xmax_reader,
-                add_shower_params=True,
-                add_standard_recon=True,
+                add_shower_params=config.add_shower_params,
+                add_standard_recon=config.add_standard_recon,
                 config=config,
             )
 
