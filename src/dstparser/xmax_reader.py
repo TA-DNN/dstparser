@@ -146,6 +146,7 @@ class XmaxReader:
 
             # elongation rate with mass dependent correction
             # for formula ⟨Xmax​⟩=X0​+D(logE−19)+(ξ−ln10D​+δ(logE−19))lnA
+            # It is a tiny correction or the order 0.1 g/cm2
             eff_elongation = self.D + self.delta * np.log(np.maximum(mass, 1))
 
             # Scale the realization from the bin center to the sampled energy
