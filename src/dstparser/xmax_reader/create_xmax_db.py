@@ -4,6 +4,13 @@ import numpy as np
 import pandas as pd
 
 
+model_prefix_map_global = {
+    "eposlhc_": "eposlhc",
+    "qgsii04": "qgsjetii04",
+    "sibyll": "sibyll23",
+}
+
+
 def nested_dict():
     return defaultdict(nested_dict)
 
@@ -20,8 +27,6 @@ def to_sorted_dict(d):
 
 def create_xmax_db_dict(root, model_prefix):
 
-    models = {"eposlhc_": "eposlhc", "qgsii04": "qgsjetii04", "sibyll": "sibyll23"}
-
     root = Path(root)
     res = nested_dict()
 
@@ -29,7 +34,7 @@ def create_xmax_db_dict(root, model_prefix):
         if not model_dir.is_dir():
             continue
 
-        model = models[model_prefix]
+        model = model_prefix_map_global[model_prefix]
         primary = model_dir.name.replace(model_prefix, "")
 
         for period_dir in model_dir.iterdir():
@@ -134,22 +139,37 @@ def create_xmax_db(root, model_prefix, xmax_db):
     save_xmax_db_hdf5(res, xmax_db)
 
 
-if __name__ == "__main__":
-
-    # Example:
+def task_create_db():
     root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank"
-    # model_prefix = "qgsii04"
-    # xmax_db = Path(__file__).parent / "qgsii04_xmax_db.h5"
 
+    model_prefixes = ["qgsii04", "eposlhc_"]
+    output_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2026/02/xmax_db"
+    output_dir = Path(output_dir)
+
+    for model_prefix in model_prefixes:
+
+        model_name = model_prefix_map_global[model_prefix]
+        output_db = output_dir / f"{model_name}_xmax_db.h5"
+        create_xmax_db(root, model_prefix, output_db)
+
+
+def task_test_read():
+
+    root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank"
     model_prefix = "eposlhc_"
     xmax_db = Path(__file__).parent / "eposlhc_xmax_db.h5"
 
-    create_xmax_db(root, model_prefix, xmax_db)
+    df = load_xmax_db_hdf5(xmax_db, "qgsii04", "proton", "080417_160603")
 
-    # df = load_xmax_db_hdf5(xmax_db, "qgsii04", "proton", "080417_160603")
+    bin_id = 1
+    shower_id = 879
+    xmax = df.loc[(bin_id, shower_id), "xmax"]
+    zenith = df.loc[(bin_id, shower_id), "zenith_angle"]
+    ngen = df.loc[(bin_id, shower_id), "ngenerated"]
 
-    # bin_id = 1
-    # shower_id = 879
-    # xmax = df.loc[(bin_id, shower_id), "xmax"]
-    # zenith = df.loc[(bin_id, shower_id), "zenith_angle"]
-    # ngen = df.loc[(bin_id, shower_id), "ngenerated"]
+    print(f"xmax={xmax}, zenith={zenith}, ngen={ngen}")
+
+
+if __name__ == "__main__":
+
+    task_create_db()

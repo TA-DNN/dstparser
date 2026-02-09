@@ -176,7 +176,7 @@ class XmaxScaler:
         """
         if (self.xmax0 is None) or (self.xmax0 == 0):
             # Generate random Xmax for model and energy
-            from dstparser import rand_xmax
+            from dstparser.xmax_reader.xmax_auger import rand_xmax
 
             # Convert EeV to log10(eV)
             log10e = np.log10(energies) + 18
