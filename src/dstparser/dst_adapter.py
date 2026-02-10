@@ -231,40 +231,23 @@ def cut_events(event, wform):
     # ! The code below takes only first part (waveform) in case if
     # ! the signal consists of several such parts
 
-    def get_occurrence_keys(ids):
-        """Create unique keys (ID << 32 | occurrence_count) for matching."""
-        order = np.argsort(ids, kind="stable")
-        rev_order = np.argsort(order)  # To get back to original positions
-        sorted_ids = ids[order]
-
-        # Identify where IDs change to create a reset-able counter
-        is_duplicate = np.concatenate(
-            ([0], (sorted_ids[1:] == sorted_ids[:-1]).astype(int))
-        )
-        # Vectorized segmented cumsum
-        group_offsets = np.maximum.accumulate(np.arange(len(ids)) * (is_duplicate == 0))
-        occurrence_count = np.arange(len(ids)) - group_offsets
-
-        # Create unique key: (detector_id << 32) | occurrence_number
-        return (ids.astype(np.int64) << 32) + occurrence_count[rev_order]
-
-    # 1. Generate unique keys for matching events to waveforms
-    ev_ids = event[0].astype(int)
-    wf_ids = wform[0].astype(int)
-
-    ev_keys = get_occurrence_keys(ev_ids)
-    wf_keys = get_occurrence_keys(wf_ids)
-
-    # 2. Match waveforms to events using searchsorted (O(N log N))
-    wf_sorter = np.argsort(wf_keys)
-    matched_wf_indices = wf_sorter[np.searchsorted(wf_keys, ev_keys, sorter=wf_sorter)]
-
-    # 3. Filter by status > 2 FIRST (before deduplication)
+    # 1. Get nfold from ORIGINAL (unfiltered) event array
+    nfold_orig = event[11].astype(int)
+    
+    # 2. Filter by status > 2 FIRST (before matching waveforms)
     status_mask = event[1] > 2
     event = event[:, status_mask]
-    wform = wform[:, matched_wf_indices[status_mask]]
-
-    # 4. Deduplicate: keep only first occurrence of each detector ID
+    
+    # 3. Calculate waveform indices: for each filtered hit, find its first waveform
+    # Each hit "owns" nfold consecutive waveforms in the original waveform array
+    # Compute cumulative sum to find waveform start index for each hit
+    wf_starts = np.concatenate(([0], np.cumsum(nfold_orig)[:-1]))
+    wf_indices = wf_starts[status_mask]  # First waveform index for each filtered hit
+    
+    # 4. Select first waveform for each filtered hit
+    wform = wform[:, wf_indices]
+    
+    # 5. Deduplicate: keep only first occurrence of each detector ID
     _, first_indices = np.unique(event[0], return_index=True)
     first_indices.sort()
 
