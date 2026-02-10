@@ -1,5 +1,6 @@
 # Root path to the directory with data
-# root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM"
+# root_dir = "/ceph/sharedfs/work/TAML2024/benMC/install/sdanalysis_2019"
+# root_dir = "/ceph/sharedfs/work/TAML2024/benMC/install/sdanalysis_2019"
 root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019"
 dst_reader = "sditerator_no_standard_recon.run"
 dst_reader_add_standard_recon = "sditerator_add_standard_recon_v2.run"

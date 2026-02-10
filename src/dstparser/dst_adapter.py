@@ -230,26 +230,47 @@ def cut_events(event, wform):
     # ! If the signal > 128 bins it is divided on parts with 128 in each
     # ! The code below takes only first part (waveform) in case if
     # ! the signal consists of several such parts
-    # Set all repeating elements to False, except first one
-    sdid = event[0]
-    u, c = np.unique(sdid, return_counts=True)
-    dup = u[c > 1]
-    mask = sdid == sdid
-    for el in dup:
-        mask[np.where(sdid == el)[0][1:]] = False
 
-    event = event[:, mask]
-    # exclude coincidence signals
-    # the signal is a part of the event
-    event = event[:, event[1] > 2]
+    def get_occurrence_keys(ids):
+        """Create unique keys (ID << 32 | occurrence_count) for matching."""
+        order = np.argsort(ids, kind="stable")
+        rev_order = np.argsort(order)  # To get back to original positions
+        sorted_ids = ids[order]
 
-    # Pick corresponding waveforms
-    wform_idx = []
-    for xycoord in event[0].astype(np.int32):
-        # Take only the first waveform (second [0])
-        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
+        # Identify where IDs change to create a reset-able counter
+        is_duplicate = np.concatenate(
+            ([0], (sorted_ids[1:] == sorted_ids[:-1]).astype(int))
+        )
+        # Vectorized segmented cumsum
+        group_offsets = np.maximum.accumulate(np.arange(len(ids)) * (is_duplicate == 0))
+        occurrence_count = np.arange(len(ids)) - group_offsets
 
-    wform = wform[3:, wform_idx]
+        # Create unique key: (detector_id << 32) | occurrence_number
+        return (ids.astype(np.int64) << 32) + occurrence_count[rev_order]
+
+    # 1. Generate unique keys for matching events to waveforms
+    ev_ids = event[0].astype(int)
+    wf_ids = wform[0].astype(int)
+
+    ev_keys = get_occurrence_keys(ev_ids)
+    wf_keys = get_occurrence_keys(wf_ids)
+
+    # 2. Match waveforms to events using searchsorted (O(N log N))
+    wf_sorter = np.argsort(wf_keys)
+    matched_wf_indices = wf_sorter[np.searchsorted(wf_keys, ev_keys, sorter=wf_sorter)]
+
+    # 3. Filter by status > 2 FIRST (before deduplication)
+    status_mask = event[1] > 2
+    event = event[:, status_mask]
+    wform = wform[:, matched_wf_indices[status_mask]]
+
+    # 4. Deduplicate: keep only first occurrence of each detector ID
+    _, first_indices = np.unique(event[0], return_index=True)
+    first_indices.sort()
+
+    event = event[:, first_indices]
+    wform = wform[3:, first_indices]  # [3:] removes id, clkcnt, mclkcnt rows
+
     return event, wform
 
 

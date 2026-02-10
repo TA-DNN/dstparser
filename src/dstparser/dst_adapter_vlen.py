@@ -299,7 +299,20 @@ def remove_mismatch(expected, actual, hit_offsets, wf_offsets):
     return mask
 
 
-def detector_readings_flat(dst_file, data, hits, waveforms):
+def detector_readings_flat(dst_file, data, hits, waveforms, badsd=None, add_badsd=True):
+    """Extract detector readings from hits and waveforms.
+
+    Args:
+        dst_file: Path to DST file (for error messages)
+        data: Dictionary to populate with detector data
+        hits: Dictionary with hit data and offsets
+        waveforms: Dictionary with waveform data and offsets
+        badsd: Dictionary with broken detector info (from parse_dst_string)
+        add_badsd: If True, add badsd arrays to output (for CNN grid format)
+
+    Returns:
+        Updated data dictionary
+    """
     # for c = 3e10 cm/s:
     # to_nsec = 4 * 1000
     # The below is more correct for c = 2.998e10 cm/c,
@@ -336,7 +349,7 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
         mask_matched = remove_mismatch(
             expected_xxyy, actual_xxyy, hit_offsets, waveforms["offsets"]
         )
-                
+
         waveforms_offsets = filter_offsets(mask_matched, waveforms["offsets"])
 
         waveforms = {
@@ -457,6 +470,12 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
     # Devision of flattened time_traces to events
     data["tt_offsets"] = waveforms["offsets"]
 
+    # Add badsd (broken/non-operational detectors) for CNN grid format
+    if add_badsd and badsd is not None:
+        # Store as flat array with offsets (consistent with hits/waveforms structure)
+        data["badsd"] = badsd["bsdinfo_.xxyyout[x]"]  # Detector IDs
+        data["badsd_offsets"] = badsd["offsets"]  # Event boundaries
+
     return data
 
 
@@ -465,6 +484,7 @@ def parse_dst_file_vlen(
     xmax_reader=None,
     add_shower_params=True,
     add_standard_recon=True,
+    add_badsd=True,
     config=None,
 ):
 
@@ -491,7 +511,9 @@ def parse_dst_file_vlen(
     if add_standard_recon:
         data = standard_recon(data, events)
 
-    data = detector_readings_flat(dst_file, data, hits, waveforms)
+    data = detector_readings_flat(
+        dst_file, data, hits, waveforms, badsd=badsd, add_badsd=add_badsd
+    )
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)

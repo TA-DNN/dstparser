@@ -95,28 +95,39 @@ def compress_sparse_array(array, np_dtype=np.float16, test_compression=False):
 
 
 def write_h5(filename, data):
-    with h5py.File(filename, "w") as f:
-        for key, value in data.items():
+    def recursively_store(group, data_dict):
+        for key, value in data_dict.items():
             if isinstance(value, dict):
-                for key1, value1 in value.items():
-                    f.create_dataset(f"{key}/{key1}", data=value1)
+                subgroup = group.create_group(key)  # Create subgroup
+                recursively_store(subgroup, value)  # Recurse into it
             else:
-                f.create_dataset(f"{key}", data=value)
+                group.create_dataset(key, data=value)  # Store dataset
+
+    with h5py.File(filename, "w") as f:
+        recursively_store(f, data)
 
 
-def read_h5(filename):
-    data = dict()
-    with h5py.File(filename, "r") as f:
-        for key, value in f.items():
+def read_h5(filename, ignore=None, restore_fn=restore_sparse_array):
+    def recursively_load(group):
+        """Recursively load nested HDF5 groups into a dictionary."""
+        data_dict = {}
+        for key, value in group.items():
+            if ignore and key in ignore:
+                continue
+
             if isinstance(value, h5py.Group):
-                data[key] = dict()
-                for key1, value1 in value.items():
-                    data[key][key1] = value1[:]
-                data[key] = restore_sparse_array(data[key])
+                data_dict[key] = recursively_load(value)  # Recurse into group
             else:
-                data[key] = value[:]
+                data_dict[key] = value[...]  # Read dataset as NumPy array
 
-    return data
+        # Apply restore function if provided
+        if restore_fn:
+            data_dict = restore_fn(data_dict)
+
+        return data_dict
+
+    with h5py.File(filename, "r") as f:
+        return recursively_load(f)
 
 
 def save2hdf5(
