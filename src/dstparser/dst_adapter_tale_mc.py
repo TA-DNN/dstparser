@@ -24,11 +24,12 @@ Key differences from TASD vlen format:
   - pulse_area: computed as (fadc - pedestal) / mip_counts_per_vem summed over
     the full 128-bin window, per layer. This gives total signal in VEM, matching
     the intent of pulse_area in the TASD vlen format.
-  - arrival_times: sdanalysis rufptn formula without intra-window correction:
-      reltime = ((1e6*clkcnt/mclkcnt) + SD_CORR) * TIMDIST, minus per-event min.
+  - arrival_times: exact sdanalysis rufptn formula:
+      reltime = ((1e6*clkcnt/mclkcnt) + 0.02*start_i + SD_CORR) * TIMDIST
+    where start_i = fadcsi (signal start channel, computed in C by
+    compute_start_i — replicates processFADC signal detection, per layer).
     Units: counter-separation-distance (TASD reltime units, 1 unit = 4000 ns).
-    Omits 0.02*start_i term (rusdraw_.fadcti ≠ start_i for multi-fold hits).
-    Accuracy: ±20 ns (one FADC tick). Includes GPS rollover + SD_TIME_CORRECTION.
+    Includes GPS rollover correction and SD_TIME_CORRECTION (-0.860 µs).
     The downstream pipeline multiplies by 4000 ns → nanoseconds.
 
 Verified fields [2026-06-03]:
@@ -117,16 +118,13 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
     status             = np.full(total_hits, 4, dtype=np.int32)
     nfold_arr          = np.ones(total_hits, dtype=np.int32)
 
-    # Arrival times — sdanalysis rufptn formula (rufptnAnalysis.cpp lines 394–456),
-    # without the intra-window fadcti correction.
+    # Arrival times — exact sdanalysis rufptn formula (rufptnAnalysis.cpp lines 394–456).
     #
-    # Full sdanalysis formula:
     #   reltime = ((1e6*clkcnt/mclkcnt) + 0.02*start_i + SD_CORR) * TIMDIST
-    # where start_i is the FADC channel of signal onset found by pattern recognition.
-    # rusdraw_.fadcti is NOT start_i — for multi-fold hits fadcti accumulates across
-    # 128-bin windows and can reach 100k+, causing huge spurious timing offsets.
-    # We omit the 0.02*fadcti term; accuracy is then ±20 ns (one FADC tick),
-    # negligible compared to the µs shower timing scale.
+    #
+    # fadcsi[H,2] = signal start channel computed by compute_start_i() in C
+    # (replicates sdanalysis processFADC: first channel where SIGNALCN=4 consecutive
+    # channels exceed mped + 5*pedrms). This is the correct start_i per layer.
     #
     # Constants from rufptn_constants.h:
     #   TIMDIST = 0.249827048333  (c/1200m, µs → counter-sep-dist units)
@@ -138,6 +136,7 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
 
     clkcnt_f  = raw["clkcnt"].astype(np.float64)               # [H]
     mclkcnt_f = raw["mclkcnt"].astype(np.float64)              # [H]
+    fadcsi_f  = raw["fadcsi"].astype(np.float64)               # [H, 2]
 
     # 1-second GPS rollover correction: clkcnt/50 gives µs; compare to event usec.
     usec_per_hit = np.repeat(usec.astype(np.float64), nofwf)   # [H]
@@ -147,14 +146,14 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
     clkcnt_corr[diff >  _LARGE] -= mclkcnt_f[diff >  _LARGE]
     clkcnt_corr[diff < -_LARGE] += mclkcnt_f[diff < -_LARGE]
 
-    # Absolute time in TIMDIST units (same for both layers — clock is per-counter)
-    t_abs_1d = ((1e6 * clkcnt_corr / mclkcnt_f) + _SD_CORR) * _TIMDIST  # [H]
-    t_abs    = np.stack([t_abs_1d, t_abs_1d], axis=1)                    # [H, 2]
+    # Absolute time per layer: clock term (scalar) + 0.02µs × start_i (per-layer)
+    clk_abs  = (1e6 * clkcnt_corr / mclkcnt_f)[:, np.newaxis]         # [H, 1]
+    t_abs    = (clk_abs + 0.02 * fadcsi_f + _SD_CORR) * _TIMDIST      # [H, 2]
 
-    # Subtract per-event minimum (earliest hit)
-    t_min = np.minimum.reduceat(t_abs, hit_offsets[:-1], axis=0)  # [N, 2]
-    t_min_per_hit = np.repeat(t_min, nofwf, axis=0)               # [H, 2]
-    arrival_times = (t_abs - t_min_per_hit).astype(np.float32)    # [H, 2]
+    # Subtract per-event minimum (earliest hit, per layer)
+    t_min = np.minimum.reduceat(t_abs, hit_offsets[:-1], axis=0)       # [N, 2]
+    t_min_per_hit = np.repeat(t_min, nofwf, axis=0)                    # [H, 2]
+    arrival_times = (t_abs - t_min_per_hit).astype(np.float32)         # [H, 2]
 
     # Time traces — FADC to VEM, fully vectorised over all hits
     # raw["fadc"]  = [H, 2, 128] int32
