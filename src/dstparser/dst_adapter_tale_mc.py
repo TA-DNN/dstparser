@@ -161,19 +161,15 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
         arrival_times[s:e, 0] = arr_t   # lower layer
         arrival_times[s:e, 1] = arr_t   # upper layer (same clock)
 
-        # Time traces: convert FADC counts to VEM.
-        # VEM = (fadc_bin - pedestal) / mip_counts_per_vem, clipped to >= 0.
-        for i in range(n):
-            for layer in range(2):
-                raw  = np.array(fadc_raw[i][layer], dtype=np.float32)
-                ped  = fadcav[i, layer]
-                mip  = mip_cnts[i, layer]
-                if mip > 0:
-                    time_traces[s + i, layer] = np.clip(
-                        (raw - ped) / mip, 0.0, None
-                    )
-                else:
-                    time_traces[s + i, layer] = 0.0
+        # Time traces: convert FADC counts to VEM — fully vectorised.
+        # fadc_raw is list[n, 2, tuple[128]]; convert to [n, 2, 128] in one shot.
+        fadc_np = np.array(fadc_raw, dtype=np.float32)          # [n, 2, 128]
+        ped     = fadcav[:, :, np.newaxis]                       # [n, 2, 1]
+        mip     = mip_cnts[:, :, np.newaxis]                     # [n, 2, 1]
+        safe_mip = np.where(mip > 0, mip, 1.0)
+        tt = np.clip((fadc_np - ped) / safe_mip, 0.0, None)
+        tt[mip[:, :, 0] == 0] = 0.0                             # zero out bad MIP
+        time_traces[s:e] = tt                                    # [n, 2, 128]
 
         # Pulse area: sum of the pedestal-subtracted waveform in VEM (same as
         # waveform_sum total signal used in legacy TASD pipeline).
