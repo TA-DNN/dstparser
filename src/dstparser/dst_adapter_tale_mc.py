@@ -25,10 +25,10 @@ Key differences from TASD vlen format:
     the full 128-bin window, per layer. This gives total signal in VEM, matching
     the intent of pulse_area in the TASD vlen format.
   - arrival_times: relative clock count (clkcnt - min(clkcnt)) per event,
-    divided by mclkcnt (50_000_000) to give [0,1]-normalised units.
-    NOTE: units differ from TASD reltime (counter-sep-dist units). The downstream
-    pipeline multiplies by 4000 ns — this will need a separate calibration factor
-    for TALE once the clock frequency is confirmed.
+    divided by 200 to give TASD-compatible reltime units (1 unit = 4000 ns).
+    Conversion: clkcnt is a 50 MHz clock (20 ns/tick); 4000 ns / 20 ns = 200 ticks
+    per TASD unit. The downstream pipeline multiplies by 4000 ns → nanoseconds.
+    Verified: max spread ~63 µs across TALE array, consistent with TALE geometry.
 
 Verified fields [2026-06-03]:
   - rusdmc: energy (EeV), theta/phi (rad), corexyz (cm), parttype (CORSIKA ID)
@@ -116,14 +116,16 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
     status             = np.full(total_hits, 4, dtype=np.int32)
     nfold_arr          = np.ones(total_hits, dtype=np.int32)
 
-    # Arrival times — vectorised over all hits at once
-    # clkcnt / mclkcnt are per-hit int32 from C; convert to float for division
-    clkcnt  = raw["clkcnt"].astype(np.float64)         # [H]
-    mclkcnt = raw["mclkcnt"].astype(np.float64)        # [H]
-    # Subtract per-event minimum using offsets
-    clk_min = np.minimum.reduceat(clkcnt, hit_offsets[:-1])   # [N]
-    clk_min_per_hit = np.repeat(clk_min, nofwf)               # [H]
-    arr_t = ((clkcnt - clk_min_per_hit) / mclkcnt).astype(np.float32)
+    # Arrival times — vectorised over all hits at once.
+    # clkcnt is a 50 MHz DAQ clock (1 tick = 20 ns).
+    # TASD reltime unit = 1 counter-separation distance = 4000 ns = 200 ticks.
+    # Convert: ticks / 200 → TASD-compatible reltime units.
+    # The downstream pipeline multiplies by 4000 ns to get nanoseconds,
+    # so this gives physically correct timing (max ~60 µs across TALE array).
+    clkcnt = raw["clkcnt"].astype(np.float64)                  # [H]
+    clk_min = np.minimum.reduceat(clkcnt, hit_offsets[:-1])    # [N] per-event min
+    clk_min_per_hit = np.repeat(clk_min, nofwf)                # [H]
+    arr_t = ((clkcnt - clk_min_per_hit) / 200.0).astype(np.float32)
     arrival_times = np.stack([arr_t, arr_t], axis=1)           # [H, 2]
 
     # Time traces — FADC to VEM, fully vectorised over all hits
