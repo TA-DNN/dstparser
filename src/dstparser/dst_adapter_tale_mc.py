@@ -67,36 +67,29 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
         print(f"File not found: {dst_file}")
         return None
 
-    # Accumulate per-event lists; converted to numpy at the end.
-    events_mc = []    # one dict per event from rusdmc
-    events_draw = []  # one dict per event from rusdraw
-
+    # ------------------------------------------------------------------ #
+    # Fast path: single C pass via dstio.tale.fast_read_tale_mc           #
+    # ------------------------------------------------------------------ #
     try:
-        with dstio.open(str(dst_file), ["rusdmc", "rusdraw"]) as dst:
-            for ev in dst:
-                mc   = ev.get("rusdmc")
-                draw = ev.get("rusdraw")
-                if mc is None or draw is None:
-                    continue
-                events_mc.append(mc)
-                events_draw.append(draw)
+        raw = dstio.tale.fast_read_tale_mc(str(dst_file))
     except Exception as e:
-        print(f"dstio failed on {dst_file}: {e}")
+        print(f"fast_read_tale_mc failed on {dst_file}: {e}")
         return None
 
-    if not events_mc:
+    if raw is None or len(raw.get("energy", [])) == 0:
         return None
 
-    n_events = len(events_mc)
+    n_events = len(raw["energy"])
+    nofwf    = raw["nofwf"]                            # [N] int32
 
     # ------------------------------------------------------------------ #
     # Event-level MC truth                                                 #
     # ------------------------------------------------------------------ #
-    energy      = np.array([e["energy"]   for e in events_mc], dtype=np.float64)
-    theta       = np.array([e["theta"]    for e in events_mc], dtype=np.float64)
-    phi         = np.array([e["phi"]      for e in events_mc], dtype=np.float64)
-    parttype    = np.array([e["parttype"] for e in events_mc], dtype=np.int32)
-    corexyz     = np.array([e["corexyz"]  for e in events_mc], dtype=np.float64)  # [N,3] cm
+    energy   = raw["energy"].astype(np.float64)
+    theta    = raw["theta"].astype(np.float64)
+    phi      = raw["phi"].astype(np.float64)
+    parttype = raw["parttype"]                         # int32
+    corexyz  = raw["corexyz"].astype(np.float64)       # [N,3] cm
 
     mass_number = _corsika_id2mass(parttype)
 
@@ -106,16 +99,11 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
         np.cos(theta),
     ], axis=1).astype(np.float64)
 
-    # xmax not available in TALE MC
-    xmax = np.full(n_events, np.nan, dtype=np.float64)
+    xmax = np.full(n_events, np.nan, dtype=np.float64)  # not in TALE MC
 
-    # ------------------------------------------------------------------ #
-    # Event-level timing (from rusdraw)                                    #
-    # ------------------------------------------------------------------ #
-    yymmdd = np.array([e["yymmdd"] for e in events_draw], dtype=np.int64)
-    hhmmss = np.array([e["hhmmss"] for e in events_draw], dtype=np.int64)
-    usec   = np.array([e["usec"]   for e in events_draw], dtype=np.int64)
-    nofwf  = np.array([e["nofwf"]  for e in events_draw], dtype=np.int32)
+    yymmdd = raw["yymmdd"].astype(np.int64)
+    hhmmss = raw["hhmmss"].astype(np.int64)
+    usec   = raw["usec"].astype(np.int64)
 
     # ------------------------------------------------------------------ #
     # Hit-level arrays (flat, offset-encoded)                              #
@@ -123,64 +111,36 @@ def parse_tale_mc_file(dst_file: str | Path) -> dict | None:
     hit_offsets = np.concatenate([[0], np.cumsum(nofwf)]).astype(np.int64)
     total_hits  = int(hit_offsets[-1])
 
-    detector_ids      = np.empty(total_hits, dtype=np.int32)
-    arrival_times     = np.empty((total_hits, 2), dtype=np.float32)
-    pulse_area        = np.empty((total_hits, 2), dtype=np.float32)
-    detector_positions = np.zeros((total_hits, 3), dtype=np.float32)  # no xyzclf in TALE
-    status            = np.full(total_hits, 4, dtype=np.int32)        # hardware-triggered = good
-    nfold_arr         = np.ones(total_hits, dtype=np.int32)           # one window per hit
+    detector_ids       = raw["xxyy"]                  # [H] int32
+    detector_positions = np.zeros((total_hits, 3), dtype=np.float32)  # no xyzclf
+    status             = np.full(total_hits, 4, dtype=np.int32)
+    nfold_arr          = np.ones(total_hits, dtype=np.int32)
 
-    # Time-trace level: one 128-bin window per hit, 2 layers
-    # Layout: time_traces[i] = fadc[hit_i] in VEM = (fadc - ped) / mip_count
-    # hit_tt_offsets[i] = i (each hit has exactly one waveform window)
+    # Arrival times — vectorised over all hits at once
+    # clkcnt / mclkcnt are per-hit int32 from C; convert to float for division
+    clkcnt  = raw["clkcnt"].astype(np.float64)         # [H]
+    mclkcnt = raw["mclkcnt"].astype(np.float64)        # [H]
+    # Subtract per-event minimum using offsets
+    clk_min = np.minimum.reduceat(clkcnt, hit_offsets[:-1])   # [N]
+    clk_min_per_hit = np.repeat(clk_min, nofwf)               # [H]
+    arr_t = ((clkcnt - clk_min_per_hit) / mclkcnt).astype(np.float32)
+    arrival_times = np.stack([arr_t, arr_t], axis=1)           # [H, 2]
+
+    # Time traces — FADC to VEM, fully vectorised over all hits
+    # raw["fadc"]  = [H, 2, 128] int32
+    # raw["fadcav"] = [H, 2]    int32  pedestal
+    # raw["pchmip"] = [H, 2]    int32  MIP peak channel
+    fadc_f   = raw["fadc"].astype(np.float32)                  # [H, 2, 128]
+    ped      = raw["fadcav"].astype(np.float32)[:, :, np.newaxis]  # [H, 2, 1]
+    mip_cnts = raw["pchmip"].astype(np.float32)[:, :, np.newaxis]  # [H, 2, 1]
+    safe_mip = np.where(mip_cnts > 0, mip_cnts, 1.0)
+    time_traces = np.clip((fadc_f - ped) / safe_mip, 0.0, None)
+    time_traces[mip_cnts[:, :, 0] == 0] = 0.0                 # [H, 2, 128]
+
+    # Pulse area: waveform sum in VEM
+    pulse_area = time_traces.sum(axis=2).astype(np.float32)    # [H, 2]
+
     hit_tt_offsets = np.arange(total_hits + 1, dtype=np.int64)
-    time_traces    = np.empty((total_hits, 2, 128), dtype=np.float32)
-
-    for ievt, draw in enumerate(events_draw):
-        s = int(hit_offsets[ievt])
-        e = int(hit_offsets[ievt + 1])
-        n = e - s
-        if n == 0:
-            continue
-
-        xxyy     = np.array(draw["xxyy"],    dtype=np.int32)    # [n]
-        clkcnt   = np.array(draw["clkcnt"],  dtype=np.float64)  # [n]
-        mclkcnt  = np.array(draw["mclkcnt"], dtype=np.float64)  # [n] max clock (~50M)
-        fadcav   = np.array(draw["fadcav"],  dtype=np.float32)  # [n,2] pedestal counts
-        mip_cnts = np.array(draw["pchmip"],  dtype=np.float32)  # [n,2] counts per MIP
-        fadc_raw = draw["fadc"]                                  # list[n] of list[2] of tuple[128]
-
-        detector_ids[s:e] = xxyy
-
-        # Arrival times: relative clock count normalised by max clock.
-        # Units: fraction of 50MHz clock period (~20ns steps, max ~1 second).
-        clk_rel = clkcnt - clkcnt.min()
-        # Divide by mclkcnt so values are in [0, 1]. Both layers share the same
-        # clock, so repeat for upper layer.
-        arr_t = (clk_rel / mclkcnt).astype(np.float32)
-        arrival_times[s:e, 0] = arr_t   # lower layer
-        arrival_times[s:e, 1] = arr_t   # upper layer (same clock)
-
-        # Time traces: convert FADC counts to VEM — fully vectorised.
-        # fadc_raw is list[n, 2, tuple[128]]; convert to [n, 2, 128] in one shot.
-        fadc_np = np.array(fadc_raw, dtype=np.float32)          # [n, 2, 128]
-        ped     = fadcav[:, :, np.newaxis]                       # [n, 2, 1]
-        mip     = mip_cnts[:, :, np.newaxis]                     # [n, 2, 1]
-        safe_mip = np.where(mip > 0, mip, 1.0)
-        tt = np.clip((fadc_np - ped) / safe_mip, 0.0, None)
-        tt[mip[:, :, 0] == 0] = 0.0                             # zero out bad MIP
-        time_traces[s:e] = tt                                    # [n, 2, 128]
-
-        # Pulse area: sum of the pedestal-subtracted waveform in VEM (same as
-        # waveform_sum total signal used in legacy TASD pipeline).
-        pulse_area[s:e, 0] = time_traces[s:e, 0].sum(axis=1)
-        pulse_area[s:e, 1] = time_traces[s:e, 1].sum(axis=1)
-
-    # Reshape time_traces to match vlen format: [total_hits, 2, 128] → stored as [total_hits, 128, 2]?
-    # Check: TASD vlen stores as [ntt, 2, 128] (layer first, then bins).
-    # dst_adapter_vlen.py line 469: data["time_traces"] = (waveforms["rusdraw_.fadc"] / vem)
-    # shape is [ntt, 2, 128] where axis 1 = layer.
-    # Our time_traces is already [total_hits, 2, 128] — correct.
 
     # ------------------------------------------------------------------ #
     # Assemble output dict                                                  #
