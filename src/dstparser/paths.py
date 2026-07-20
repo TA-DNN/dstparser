@@ -23,3 +23,14 @@ xmax_data_dir_fe = (
     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
     "qgsii04iron/080417_160603/Em1/"
 )
+
+# TAx4 standard reconstruction lives in a SEPARATE sdanalysis install, built
+# for TAx4/TALE geometry -- NOT benMC/sdanalysis_2019 above (that one's
+# add_standard_recon_v2 rejects TAx4 events; verified 2026-07-20). This
+# install's own rufptn.run/rufldf.run pass1/pass2 chain produced a real
+# (if smaller-field) reconstruction: LDF-fit energy, S800, core, geometry-fit
+# direction, border distance.
+root_dir_tax4_std_recon = (
+    "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM"
+)
+dst_reader_tax4_std_recon = "sditerator_add_standard_recon.run"

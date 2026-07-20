@@ -1,5 +1,5 @@
 import numpy as np
-from dstparser.dst_reader import read_dst_file_all_events
+from dstparser.dst_reader import read_dst_file_all_events, read_dst_file_tax4_std_recon
 from dstparser.dst_parsers import dst_sections, parse_event, parse_sdwaveform, parse_badsdinfo
 import dstparser.tasd_clf as tasd_clf
 import re
@@ -119,6 +119,80 @@ def raw_event_counts(data, dst_lists):
     data["nstclust"] = event_list[9]
     # number of waveforms for event, all detectors (rusdraw_.nofwf)
     data["nofwf"] = event_list[10]
+    return data
+
+
+def tax4_std_recon(data, dst_lists):
+    """
+    Use with read_dst_file_tax4_std_recon (the TALE install's
+    sditerator_add_standard_recon.run). Real reconstruction, but a SMALLER
+    field set than TA-SD's own add_standard_recon_v2 -- only LDF fit +
+    geometry fit + border cuts, no "combined" fit (verified 2026-07-20
+    against sditerator_cppanalysis_add_standard_recon.cpp:31-43). Only events
+    with rusdraw_.nofwf>0 reach this line at all (C++-side filter).
+
+    UNVERIFIED for TAx4 specifically, flagged rather than assumed (do not
+    treat as characterized until checked against a real sample):
+    - rec_coreposition_to_CLF_meters's CLF-origin constants were written for
+      TA-SD; whether the same origin applies to TAx4's array is not checked.
+    - the "+0.5 deg zenith correction" TA-SD applies when building a unit
+      direction vector from theta/phi is NOT applied here (unknown whether it
+      applies to TAx4's geometry fit) -- shower_axis_reco is built from raw
+      theta/phi only.
+    - std_recon_border_distance/_tshape units/sign convention copied from the
+      TA-SD naming convention (rufldf_.bdist/.tdist), not re-derived for TAx4.
+    """
+    event_list = dst_lists[0]
+    data["yymmdd"] = event_list[7]
+    data["hhmmss"] = event_list[8]
+    data["nstclust"] = event_list[9]
+    data["nofwf"] = event_list[10]
+
+    # LDF fit
+    data["std_recon_energy"] = event_list[12]
+    data["std_recon_ldf_scale"] = event_list[13]
+    data["std_recon_ldf_scale_err"] = event_list[14]
+    data["std_recon_ldf_chi2"] = event_list[15]
+    data["std_recon_ldf_ndof"] = event_list[16]
+    data["std_recon_shower_core"] = np.array(
+        [
+            rec_coreposition_to_CLF_meters(event_list[17], option="x"),
+            rec_coreposition_to_CLF_meters(event_list[19], option="y"),
+        ]
+    ).transpose(1, 0)
+    data["std_recon_shower_core_err"] = np.array(
+        [
+            rec_coreposition_to_CLF_meters(event_list[18], option="dx"),
+            rec_coreposition_to_CLF_meters(event_list[20], option="dy"),
+        ]
+    ).transpose(1, 0)
+    data["std_recon_s800"] = event_list[21]
+
+    # Geometry fit (theta[1]/phi[1] assumed in degrees, matching the TA-SD
+    # naming convention -- NOT re-derived from TAx4 source, see caveats above)
+    data["std_recon_shower_axis"] = np.array(
+        [
+            np.sin(np.deg2rad(event_list[22]))
+            * np.cos(np.deg2rad(event_list[23]) + np.pi),
+            np.sin(np.deg2rad(event_list[22]))
+            * np.sin(np.deg2rad(event_list[23]) + np.pi),
+            np.cos(np.deg2rad(event_list[22])),
+        ],
+        dtype=np.float32,
+    ).transpose()
+    data["std_recon_shower_axis_err"] = np.sqrt(
+        event_list[24] * event_list[24]
+        + np.sin(np.deg2rad(event_list[22]))
+        * np.sin(np.deg2rad(event_list[22]))
+        * event_list[25]
+        * event_list[25]
+    )
+    data["std_recon_geom_chi2"] = event_list[26]
+    data["std_recon_geom_ndof"] = event_list[27]
+
+    # Border cuts
+    data["std_recon_border_distance"] = event_list[30]
+    data["std_recon_border_distance_tshape"] = event_list[31]
     return data
 
 
@@ -458,3 +532,39 @@ def parse_dst_file_tax4(
     return data
 
 
+def parse_dst_file_tax4_std_recon(
+    dst_file,
+    ntile=7,
+    xmax_reader=None,
+    avg_traces=True,
+    add_shower_params=True,
+    add_std_recon=True,
+    config=None,
+):
+    #  ntile - number of SD per one side
+    # Reads via the TALE install's sditerator_add_standard_recon.run: real
+    # LDF-fit + geometry-fit reconstruction, but only for events with
+    # nofwf>0 (the C++ side skips everything else). Use this for P0-style
+    # bias/width decomposition against truth; use parse_dst_file_tax4 above
+    # for full per-shower statistics including non-triggered throws.
+    dst_string = read_dst_file_tax4_std_recon(dst_file)
+    dst_lists = parse_dst_string_tax4(dst_string)
+
+    if dst_lists is None:
+        return None
+
+    if xmax_reader is not None:
+        xmax_reader.read_file(dst_file)
+
+    data = dict()
+    if add_shower_params:
+        data = shower_params(data, dst_lists, xmax_reader)
+
+    if add_std_recon:
+        data = tax4_std_recon(data, dst_lists)
+
+    data = detector_readings(data, dst_lists, ntile, avg_traces)
+
+    if (config is not None) and (hasattr(config, "add_event_ids")):
+        data = config.add_event_ids(data, dst_file)
+    return data
