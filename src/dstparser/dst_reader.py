@@ -5,6 +5,7 @@ from dstparser.env_vars import changed_env_paths, is_alma_linux, is_rocky_linux
 from dstparser.paths import (
     root_dir,
     dst_reader_add_standard_recon,
+    dst_reader_all_events,
     sd_analysis_env,
     openssl10_alma9,
     openssl10_rocky_linux,
@@ -26,8 +27,7 @@ if is_rocky_linux():
     os.environ[ld_paths] = f"{openssl10_rocky_linux}:{os.environ[ld_paths]}"
 
 
-def read_dst_file(dst_filename):
-    dst_reader_process = dst_reader_add_standard_recon
+def _run_dst_reader(dst_reader_process, dst_filename):
     try:
         process = subprocess.Popen(
             [dst_reader_process, str(dst_filename).strip()],
@@ -45,3 +45,14 @@ def read_dst_file(dst_filename):
         print(f'dst_reader error:\n"{error}"')
 
     return output.strip().split("\n")
+
+
+def read_dst_file(dst_filename):
+    return _run_dst_reader(dst_reader_add_standard_recon, dst_filename)
+
+
+def read_dst_file_all_events(dst_filename):
+    # sditerator_printAll.run (benMC install): dumps every THROWN event's
+    # truth + raw SD/waveform data, no reconstruction fields. Use this for
+    # full per-shower statistics including non-triggered throws.
+    return _run_dst_reader(dst_reader_all_events, dst_filename)

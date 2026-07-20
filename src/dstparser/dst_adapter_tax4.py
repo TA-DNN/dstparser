@@ -1,9 +1,50 @@
 import numpy as np
-from dstparser.dst_reader import read_dst_file
-from dstparser.dst_parsers import parse_dst_string
+from dstparser.dst_reader import read_dst_file_all_events
+from dstparser.dst_parsers import dst_sections, parse_event, parse_sdwaveform, parse_badsdinfo
 import dstparser.tasd_clf as tasd_clf
 import re
 from pathlib import Path
+
+
+def parse_sdmeta_tax4(sdmeta_list_str):
+    """
+    #SD meta DATA has 11 fields/hit for BOTH TAx4 readers (printAll and the
+    TALE install's add_standard_recon), NOT 12 like TA-SD's own
+    add_standard_recon_v2 -- no `nfold` field is emitted for TAx4 (verified
+    2026-07-20 against sditerator_cppanalysis_printAll.cpp:38-43 and
+    sditerator_cppanalysis_add_standard_recon.cpp:49-54):
+        xxyy, isgood, reltime[0], reltime[1], pulsa[0], pulsa[1],
+        xyzclf[0], xyzclf[1], xyzclf[2], vem[0], vem[1]
+    CAVEAT: in printAll's variant specifically, the vem[1] slot is actually a
+    duplicate of vem[0] (upstream printf bug -- real vem[1] is never printed
+    by that variant). The add_standard_recon variant prints real vem[1].
+    """
+    record_size = 11
+    return [
+        np.fromstring(line, sep=" ").reshape(-1, record_size).transpose()
+        for line in sdmeta_list_str
+    ]
+
+
+def parse_dst_string_tax4(dst_string):
+    # Same section layout as the standard-recon dumps (dst_sections is
+    # format-agnostic), but the #SD meta DATA record width differs (11 vs 12
+    # fields/hit) and #EVENT DATA is truth/counts-only (11 fields, no
+    # standard-recon block) -- see parse_sdmeta_tax4 and shower_params/
+    # raw_event_counts below.
+    event_list_str, sdmeta_list_str, sdwaveform_list_str, badsdinfo_list_str = (
+        dst_sections(dst_string)
+    )
+
+    if len(event_list_str) == 0:
+        return None
+
+    event_list = parse_event(event_list_str)
+    sdmeta_list = parse_sdmeta_tax4(sdmeta_list_str)
+    sdwaveform_list = parse_sdwaveform(sdwaveform_list_str)
+    badsdinfo_list = parse_badsdinfo(badsdinfo_list_str)
+
+    return event_list, sdmeta_list, sdwaveform_list, badsdinfo_list
 
 
 def corsika_id2mass(corsika_pid):
@@ -50,179 +91,34 @@ def shower_params(data, dst_lists, xmax_data):
     return data
 
 
-def standard_recon(data, dst_lists):
+def raw_event_counts(data, dst_lists):
+    """
+    Use with the printAll reader (read_dst_file_all_events / dst_lists built
+    via parse_dst_string_tax4 on printAll output). printAll's #EVENT DATA line
+    has only 11 fields -- truth (0-6, handled by shower_params above) + these
+    raw counts, NO reconstruction fields (verified 2026-07-20 against
+    sditerator_cppanalysis_printAll.cpp). printAll lists EVERY thrown event,
+    triggered or not -- use this path for full per-shower statistics.
+
+    CORRECTION 2026-07-20: an earlier version of this docstring claimed "TAx4
+    has NO standard reconstruction" -- that was wrong, based on testing only
+    the wrong binary. TAx4 DOES have a real standard reconstruction (LDF fit,
+    S800, geometry fit) via a SEPARATE install's add_standard_recon reader --
+    see tax4_std_recon() + read_dst_file_tax4_std_recon() below. This
+    function was previously named `standard_recon` and indexed
+    event_list[7..60] assuming the TA-SD add_standard_recon format; that
+    format does not match either TAx4 reader and the old code would
+    IndexError.
+    """
     event_list = dst_lists[0]
-    # Exempt from comments of cpp source code at:
-    # /ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
-    # // Reported by DAQ as time of the 1st signal in the triple that caused the triggger.
-    # // From now on, everyhting is relative to hhmmss.  Not useful in the event reconstruction.
-    # Date of event
-    # rusdraw_.yymmdd = 80916; // Event date year = 08, month = 09, day = 16
-    data["std_recon_yymmdd"] = event_list[7]
-    # Time of event
-    # rusdraw_.hhmmss = 1354;  // Event time, hour=00, minute=13, second = 54
-    data["std_recon_hhmmss"] = event_list[8]
-    # Microseconds for the second
-    # rusdraw_.usec = 111111
-    data["std_recon_usec"] = event_list[11]
-    # Number of waveforms for event for all detectors
-    data["std_recon_nofwf"] = event_list[10]
-    # number of SDs in space-time cluster
-    data["std_recon_nsd"] = event_list[9]
-    # number of SDs in space cluster
-    data["std_recon_nsclust"] = event_list[57]
-    # number of hit SDs
-    data["std_recon_nhits"] = event_list[56]
-    # number of SDs in space-time cluster & lie on the border of the array
-    data["std_recon_nborder"] = event_list[58]
-    # total charge [VEM] of SDs in the space-time cluster, (lower & upper)
-    data["std_recon_qtot"] = np.array(
-        [
-            event_list[59],
-            event_list[60],
-        ]
-    ).transpose(1, 0)
-    # energy reconstructed by the standard energy estimation table [EeV]
-    data["std_recon_energy"] = event_list[12]
-    # reconstructed scale of the Lateral Distribution Function (LDF) fit [VEM m-2]
-    data["std_recon_ldf_scale"] = event_list[13]
-    # uncertainty of the scale [VEM m-2]
-    data["std_recon_ldf_scale_err"] = event_list[14]
-    # chi-square of the LDF fit
-    data["std_recon_ldf_chi2"] = event_list[15]
-    # the number of degree of freedom of the LDF fit (= n - 3),
-    # where "n" is the number of the SDs used for the LDF fit
-    data["std_recon_ldf_ndof"] = event_list[16]
-    # core position (x, y) reconstructed by the LDF fit in CLF coordinate [m]
-    data["std_recon_shower_core"] = np.array(
-        [
-            rec_coreposition_to_CLF_meters(event_list[17], option="x"),
-            rec_coreposition_to_CLF_meters(event_list[19], option="y"),
-        ]
-    ).transpose(1, 0)
-
-    # uncertainty of the core position (x, y) reconstructed by the LDF fit
-    data["std_recon_shower_core_err"] = np.array(
-        [
-            rec_coreposition_to_CLF_meters(event_list[18], option="dx"),
-            rec_coreposition_to_CLF_meters(event_list[20], option="dy"),
-        ]
-    ).transpose(1, 0)
-    # S800 (particle density at 800 m from the shower axis) [VEM m-2]
-    data["std_recon_s800"] = event_list[21]
-
-    # reconstructed values of the geometry+LDF (combined) fit
-    data["std_recon_combined_energy"] = event_list[42]
-    data["std_recon_combined_scale"] = event_list[43]
-    data["std_recon_combined_scale_err"] = event_list[44]
-    data["std_recon_combined_chi2"] = event_list[45]
-    # the number of degree of freedom of the LDF fit (= 2*n - 6),
-    # where "n" is the number of the SDs used for the LDF fit
-    data["std_recon_combined_ndof"] = event_list[46]
-    data["std_recon_combined_shower_core"] = np.array(
-        [
-            rec_coreposition_to_CLF_meters(event_list[47], option="x"),
-            rec_coreposition_to_CLF_meters(event_list[49], option="y"),
-        ]
-    ).transpose(1, 0)
-    data["std_recon_combined_shower_core_err"] = np.array(
-        [
-            rec_coreposition_to_CLF_meters(event_list[48], option="dx"),
-            rec_coreposition_to_CLF_meters(event_list[50], option="dy"),
-        ]
-    ).transpose(1, 0)
-    data["std_recon_combined_s800"] = event_list[51]
-
-    # 3-d unit vector of the arrival direction (pointing back to the source)
-    # geometry fit with a free curved parameter.
-    # "+0.5" is a correction for zenith angle.
-    data["std_recon_shower_axis"] = np.array(
-        [
-            np.sin(np.deg2rad(event_list[32] + 0.5))
-            * np.cos(np.deg2rad(event_list[33]) + np.pi),
-            np.sin(np.deg2rad(event_list[32] + 0.5))
-            * np.sin(np.deg2rad(event_list[33]) + np.pi),
-            np.cos(np.deg2rad(event_list[32] + 0.5)),
-        ],
-        dtype=np.float32,
-    ).transpose()
-    # 3-d unit vector of the arrival direction (pointing back to the source)
-    # geometry fit with a fixed curved parameter
-    # "+0.5" is a correction for zenith angle.
-    data["std_recon_shower_axis_fixed_curve"] = np.array(
-        [
-            np.sin(np.deg2rad(event_list[22] + 0.5))
-            * np.cos(np.deg2rad(event_list[23]) + np.pi),
-            np.sin(np.deg2rad(event_list[22] + 0.5))
-            * np.sin(np.deg2rad(event_list[23]) + np.pi),
-            np.cos(np.deg2rad(event_list[22] + 0.5)),
-        ],
-        dtype=np.float32,
-    ).transpose()
-    # 3-d unit vector of the arrival direction (pointing back to the source)
-    # geometry+LDF fit
-    # "+0.5" is a correction for zenith angle.
-    data["std_recon_shower_axis_combined"] = np.array(
-        [
-            np.sin(np.deg2rad(event_list[52] + 0.5))
-            * np.cos(np.deg2rad(event_list[53]) + np.pi),
-            np.sin(np.deg2rad(event_list[52] + 0.5))
-            * np.sin(np.deg2rad(event_list[53]) + np.pi),
-            np.cos(np.deg2rad(event_list[52] + 0.5)),
-        ],
-        dtype=np.float32,
-    ).transpose()
-    # uncertainty of the pointing direction [degree]
-    # free curved parameter
-    # event_list[22] is zenith angle in deg
-    # event_list[24] is uncertainty zenith angle in deg
-    # event_list[25] is uncertainty azimuth angle in deg
-    data["std_recon_shower_axis_err"] = np.sqrt(
-        event_list[34] * event_list[34]
-        + np.sin(np.deg2rad(event_list[32]))
-        * np.sin(np.deg2rad(event_list[32]))
-        * event_list[35]
-        * event_list[35]
-    )
-    # uncertainty of the pointing direction [degree]
-    # fixed curved parameter
-    data["std_recon_shower_axis_err_fixed_curve"] = np.sqrt(
-        event_list[24] * event_list[24]
-        + np.sin(np.deg2rad(event_list[22]))
-        * np.sin(np.deg2rad(event_list[22]))
-        * event_list[25]
-        * event_list[25]
-    )
-    # uncertainty of the pointing direction [degree]
-    # geometry+LDF fit
-    data["std_recon_shower_axis_err_combined"] = np.sqrt(
-        event_list[54] * event_list[54]
-        + np.sin(np.deg2rad(event_list[52]))
-        * np.sin(np.deg2rad(event_list[52]))
-        * event_list[55]
-        * event_list[55]
-    )
-    # chi-square of the geometry fit (free curvature)
-    data["std_recon_geom_chi2"] = event_list[36]
-    # the number of degree of freedom of the geometry fit (= n - 6),
-    # where "n" is the number of the SDs used for the geometry fit
-    data["std_recon_geom_ndof"] = event_list[37]
-    # curvature paramter `a` of the geometry fit
-    data["std_recon_curvature"] = event_list[40]
-    # uncertainty of the curvature paramter `a` of the geometry fit
-    data["std_recon_curvature_err"] = event_list[41]
-    # chi-square of the geometry fit (fixed curvature)
-    data["std_recon_geom_chi2_fixed_curve"] = event_list[26]
-    # the number of degree of freedom of the geometry fit (= n - 5),
-    # where "n" is the number of the SDs used for the geometry fit
-    data["std_recon_geom_ndof_fixed_curve"] = event_list[27]
-    # distance b/w the reconstructed core and the edge from the TA SD array [in 1,200 meter unit]
-    # negative for events with the core outside of the TA SD array.
-    data["std_recon_border_distance"] = event_list[30]
-    # distance to the T-shape TA SD array, edge of the sub-arrays [in 1,200 meter unit]
-    # this value is used as "border_distance" before implementation of the boundary trigger (on 2008/11/11)
-    data["std_recon_border_distance_tshape"] = event_list[31]
-
+    data["yymmdd"] = event_list[7]
+    data["hhmmss"] = event_list[8]
+    # number of SDs in space-time cluster (rufptn_.nstclust) -- the closest
+    # thing to a quality-cut variable available for TAx4; NOT equivalent to
+    # TA-SD's std_recon_nsd (that's a std-recon-stage count; this is raw).
+    data["nstclust"] = event_list[9]
+    # number of waveforms for event, all detectors (rusdraw_.nofwf)
+    data["nofwf"] = event_list[10]
     return data
 
 
@@ -257,14 +153,28 @@ def cut_events(event, wform):
     # the signal is a part of the event
     event = event[:, event[1] > 2]
 
-    # Pick corresponding waveforms
-    wform_idx = []
-    for xycoord in event[0].astype(np.int32):
-        # Take only the first waveform (second [0])
-        wform_idx.append(np.where(wform[0] == xycoord)[0][0])
-
-    wform = wform[3:, wform_idx]
-    return event, wform
+    # Pick corresponding waveforms. For TAx4, waveform data is present for
+    # only a minority of events (~16% in a spot check, 2026-07-20) -- when
+    # absent it is absent for EVERY hit in that event (all-or-nothing, matches
+    # the event-level `nofwf` truth count), not a per-hit data error. Hits
+    # without a matching waveform get has_wf=False; their time-trace stays
+    # zero-filled but their meta-derived fields (position, signal, arrival
+    # time) are unaffected -- those come from #SD meta DATA, not the waveform.
+    has_wf = np.zeros(event.shape[1], dtype=bool)
+    if wform.shape[1] == 0:
+        # No waveform recorded for this event at all (matches nofwf==0).
+        wform = np.zeros((wform.shape[0] - 3, event.shape[1]), dtype=wform.dtype)
+    else:
+        wform_idx = []
+        for i, xycoord in enumerate(event[0].astype(np.int32)):
+            match = np.where(wform[0] == xycoord)[0]
+            if match.size > 0:
+                wform_idx.append(match[0])
+                has_wf[i] = True
+            else:
+                wform_idx.append(0)
+        wform = wform[3:, wform_idx]
+    return event, wform, has_wf
 
 
 def center_tile(event, ntile):
@@ -410,7 +320,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
         # event.shape = (11, number of detectors)
-        event, wform = cut_events(event, wform)
+        event, wform, has_wf = cut_events(event, wform)
 
         if event.shape[1] == 0:
             empty_events.append(ievt)
@@ -437,33 +347,45 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
 
         # Populate detector readings and arrival times
         wform = wform[:, inside_tile]
+        wf_mask = has_wf[inside_tile]
         fadc_per_vem_low = event[9][inside_tile]
         fadc_per_vem_up = event[10][inside_tile]
 
-        # foldedness of the hit (over how many 128 fadc widnows this signal extends)
-        # (e.g.) If the waveform consists of 128 * 3 = 384 time bins, `nfold` is 3.
-        data["nfold"][ievt, ixy[0], ixy[1]] = event[11][inside_tile]
+        # `nfold` (foldedness) is NOT available for TAx4 -- printAll's #SD meta
+        # DATA has only 11 fields/hit (see parse_sdmeta_tax4), no nfold slot.
+        # data["nfold"] stays at its zero-init.
+
+        # Meta-derived fields (position/signal/arrival time, from #SD meta
+        # DATA) apply to every hit regardless of waveform availability.
+        # Waveform-derived fields (time_traces) are only filled where
+        # wf_mask is True -- for TAx4, most events have NO waveform for ANY
+        # of their hits (all-or-nothing per event; verified 2026-07-20), and
+        # those cells stay at their zero-init rather than being computed
+        # from a meaningless placeholder waveform index.
+        ix_wf, iy_wf = ixy[0][wf_mask], ixy[1][wf_mask]
 
         if avg_traces:
             atimes = (event[2] + event[3]) / 2
             data["arrival_times"][ievt, ixy[0], ixy[1]] = atimes[inside_tile] * to_nsec
 
-            ttrace = (
-                wform[:ntime_trace] / fadc_per_vem_low
-                + wform[ntime_trace:] / fadc_per_vem_up
-            ) / 2
-            data["time_traces"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+            if wf_mask.any():
+                ttrace = (
+                    wform[:ntime_trace, wf_mask] / fadc_per_vem_low[wf_mask]
+                    + wform[ntime_trace:, wf_mask] / fadc_per_vem_up[wf_mask]
+                ) / 2
+                data["time_traces"][ievt, ix_wf, iy_wf, :] = ttrace.transpose()
 
             data["total_signals"][ievt, ixy[0], ixy[1]] = (
                 event[4][inside_tile] + event[5][inside_tile]
             ) / 2
 
         else:
-            ttrace = wform[:ntime_trace] / fadc_per_vem_low
-            data["time_traces_low"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+            if wf_mask.any():
+                ttrace = wform[:ntime_trace, wf_mask] / fadc_per_vem_low[wf_mask]
+                data["time_traces_low"][ievt, ix_wf, iy_wf, :] = ttrace.transpose()
 
-            ttrace = wform[ntime_trace:] / fadc_per_vem_up
-            data["time_traces_up"][ievt, ixy[0], ixy[1], :] = ttrace.transpose()
+                ttrace = wform[ntime_trace:, wf_mask] / fadc_per_vem_up[wf_mask]
+                data["time_traces_up"][ievt, ix_wf, iy_wf, :] = ttrace.transpose()
 
             data["arrival_times_low"][ievt, ixy[0], ixy[1]] = (
                 event[2][inside_tile] * to_nsec
@@ -502,12 +424,17 @@ def parse_dst_file_tax4(
     xmax_reader=None,
     avg_traces=True,
     add_shower_params=True,
-    add_standard_recon=True,
+    add_raw_counts=True,
     config=None,
 ):
     #  ntile - number of SD per one side
-    dst_string = read_dst_file(dst_file)
-    dst_lists = parse_dst_string(dst_string)
+    # Reads via sditerator_printAll.run: EVERY thrown event (triggered or
+    # not), truth + raw SD data, no reconstruction. For real reconstruction
+    # (fewer events -- only nofwf>0), use parse_dst_file_tax4_std_recon
+    # below (verified 2026-07-20: TAx4 DOES have a working std-recon reader,
+    # via a separate install -- corrects an earlier wrong claim in this repo).
+    dst_string = read_dst_file_all_events(dst_file)
+    dst_lists = parse_dst_string_tax4(dst_string)
 
     if dst_lists is None:
         return None
@@ -521,11 +448,13 @@ def parse_dst_file_tax4(
     if add_shower_params:
         data = shower_params(data, dst_lists, xmax_reader)
 
-    if add_standard_recon:
-        data = standard_recon(data, dst_lists)
+    if add_raw_counts:
+        data = raw_event_counts(data, dst_lists)
 
     data = detector_readings(data, dst_lists, ntile, avg_traces)
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
     return data
+
+
