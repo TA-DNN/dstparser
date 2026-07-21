@@ -32,12 +32,25 @@ def standard_recon(data, events, include_fixed_curve_fit=False):
      real TAx4 DST dumps; formulas copied unchanged from
      dst_adapter_vlen.standard_recon]
 
-    UNVERIFIED for TAx4 (copied from the TA-SD convention, flagged not assumed):
-    clf_origin_x/y and the "+0.5 deg" zenith correction were derived for
-    TA-SD's array; whether they apply unchanged to TAx4's array geometry is not
-    checked. They affect ONLY std_recon_shower_core and the reco shower-axis
-    vectors -- not truth (shower_params) nor the DNN inputs
-    (detector_readings_flat).
+    The "+0.5 deg" zenith correction (added to theta before building the reco
+    axis) IS beneficial for TAx4 and is KEPT as-is (TA-SD's value) [established,
+    verified 2026-07-21, method: reco-vs-MC-truth, 75482 triggered proton events,
+    resolved in TRUE-energy bins (quality cut ndof>=1, nsd>=5, truth zenith<45)
+    -- NOT merged across the arbitrary MC spectrum]. +0.5 lowers the
+    opening-angle median in EVERY energy bin (~20-250 EeV), so it helps at all
+    energies. But the raw zenith bias is ENERGY-DEPENDENT, not a constant:
+    median bias ~-1.3 deg at ~20 EeV rising to ~-0.65 deg at ~250 EeV (each
+    bin's bootstrap 95% CI excludes -0.5). So +0.5 under-corrects everywhere,
+    more so at low energy, and NO single constant can fully correct it (a
+    spectrum-weighted single number is meaningless here -- bin by true energy).
+    Re-tuning the standard reconstruction (energy-dependent or otherwise) is out
+    of scope -- +0.5 is applied consistently with TA-SD, not fitted to TAx4.
+    Study: ml/temp/tax4_zenith_vs_energy.py.
+
+    STILL UNVERIFIED for TAx4 (copied from TA-SD, flagged not assumed):
+    clf_origin_x/y (the SD->CLF core-frame offset) -- derived for TA-SD's array,
+    not re-checked for TAx4's geometry. Affects ONLY std_recon_shower_core, not
+    truth (shower_params) nor the DNN inputs (detector_readings_flat).
     """
     # SD origin with respect to CLF origin in CLF frame, in [1200m] units
     clf_origin_x = -12.2435
