@@ -34,3 +34,16 @@ root_dir_tax4_std_recon = (
     "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM"
 )
 dst_reader_tax4_std_recon = "sditerator_add_standard_recon.run"
+
+# TAx4 std-recon reader REBUILT LOCALLY to additionally emit rufptn_.nfold in
+# the #SD meta DATA block (12 fields/hit instead of 11) and the free-curvature
+# geometry fit + curvature in #EVENT DATA (42 fields). This removes the
+# waveform->hit assignment ambiguity that the stock reader leaves (it omits
+# nfold), so the vlen adapter can match hits to waveforms exactly like TA-SD.
+# Built from a single locally-modified source against the ceph install
+# READ-ONLY -- nothing on ceph was changed. Rebuild script + source:
+#   /home/antonpr/local_sdanalysis/tax4_reader/
+dst_reader_tax4_std_recon_nfold = (
+    "/home/antonpr/local_sdanalysis/tax4_reader/bin/"
+    "sditerator_add_standard_recon_nfold.run"
+)

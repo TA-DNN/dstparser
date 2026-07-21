@@ -8,6 +8,7 @@ from dstparser.paths import (
     dst_reader_all_events,
     root_dir_tax4_std_recon,
     dst_reader_tax4_std_recon,
+    dst_reader_tax4_std_recon_nfold,
     sd_analysis_env,
     openssl10_alma9,
     openssl10_rocky_linux,
@@ -78,3 +79,14 @@ def read_dst_file_tax4_std_recon(dst_filename):
     # sditerator_cppanalysis_add_standard_recon.cpp:29). The benMC install's
     # add_standard_recon_v2 rejects TAx4 events entirely; this one does not.
     return _run_dst_reader(dst_reader_tax4_std_recon, dst_filename)
+
+
+def read_dst_file_tax4_std_recon_nfold(dst_filename):
+    # Same as read_dst_file_tax4_std_recon, but points at the locally-rebuilt
+    # binary that ALSO prints rufptn_.nfold (12-field #SD meta DATA) and the
+    # free-curvature geometry fit (42-field #EVENT DATA). Use this for the vlen
+    # adapter (dst_adapter_tax4_vlen): with nfold present, hits map to waveforms
+    # unambiguously -- no fold-count inference needed. Runtime deps (ROOT,
+    # openssl10) are already loaded above; libbz2 resolves system-wide. See
+    # paths.dst_reader_tax4_std_recon_nfold for how it was built.
+    return _run_dst_reader(dst_reader_tax4_std_recon_nfold, dst_filename)
