@@ -4,13 +4,28 @@ import numpy as np
 from tqdm.auto import tqdm
 from pathlib import Path
 from dstparser import parse_dst_file
-from dstparser.xmax_reader import XmaxReader
+# NOTE (pre-existing staleness, flagged not fixed here): the xmax_reader package
+# was refactored -- XmaxReader is now an ABSTRACT base (concrete: XmaxReaderTxt)
+# and no longer takes a `model` arg (model is auto-detected in read_file). So
+# init_xmax_reader()'s `XmaxReader(data_dir=..., glob_pattern=..., model=...)`
+# call below is stale and will fail IF xmax is enabled. It is only reached when
+# xmax_dir is set; the TAx4 vlen path uses xmax_dir=None, so it is not hit. Left
+# for a separate xmax-focused fix.
+from dstparser.xmax_reader.xmax_reader import XmaxReader
 from dstparser.cli.io import read_h5, save2hdf5
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
 from dstparser.cli.cli import parse_config
-from dstparser import append_to_hdf5, parse_dst_file_vlen
+from dstparser import append_to_hdf5, parse_dst_file_vlen, parse_dst_file_tax4_vlen
 import h5py
+
+
+# vlen adapters selectable from the config via `vlen_adapter` (default "ta").
+# TA-SD and TAx4 share the same vlen pipeline; only the per-file parser differs.
+VLEN_ADAPTERS = {
+    "ta": parse_dst_file_vlen,
+    "tax4": parse_dst_file_tax4_vlen,
+}
 
 
 def process_files(task_function, config):
@@ -157,6 +172,16 @@ def join_hdf5(ifiles, ofile, config):
 
 
 def dst_to_hdf5_vlen(ifiles, ofile, config):
+    # Pick the vlen parser: "ta" (default, TA-SD) or "tax4". Same pipeline,
+    # same output format; TAx4 just reads its own DST layout (see
+    # parse_dst_file_tax4_vlen). Set `vlen_adapter = "tax4"` in the config.
+    adapter = getattr(config, "vlen_adapter", "ta")
+    if adapter not in VLEN_ADAPTERS:
+        raise ValueError(
+            f"Unknown vlen_adapter {adapter!r}; choose from {sorted(VLEN_ADAPTERS)}"
+        )
+    parse_vlen = VLEN_ADAPTERS[adapter]
+
     xmax_reader, update_reader = init_xmax_reader(config, init_file=ifiles[0])
 
     with h5py.File(ofile, "a") as f:
@@ -168,7 +193,7 @@ def dst_to_hdf5_vlen(ifiles, ofile, config):
                 # Update xmax_reader if the directory of the file changes
                 xmax_reader = update_xmax_reader(xmax_reader, file)
 
-            data = parse_dst_file_vlen(
+            data = parse_vlen(
                 file,
                 xmax_reader=xmax_reader,
                 add_shower_params=config.add_shower_params,
