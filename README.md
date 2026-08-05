@@ -5,14 +5,46 @@ Reads \*dst TA files and fills a dictionary with data required for DNN training.
 Installation:
 `pip install -e .`
 
+## Paths — check this first
+
+Every reader is a binary on shared storage, so `dstparser` needs to know where
+that is. See what it resolved, and whether it exists:
+
+```bash
+python -m dstparser
+```
+
+Defaults suit the analysis machine, so usually there is nothing to do. To point
+somewhere else, copy `paths_local.toml.example` to `paths_local.toml` (in the
+repo root, git-ignored) and set only the roots you want to change:
+
+```toml
+sdanalysis_root = "/home/me/local/sdanalysis"
+```
+
+Each root resolves independently — environment variable (`$DSTPARSER_TA_ROOT`,
+`$DSTPARSER_SDANALYSIS_ROOT`, `$DSTPARSER_DSTBANK_ROOT`,
+`$DSTPARSER_TRAINING_ROOT`), then `paths_local.toml`, then the built-in default.
+Importing never fails on a missing path, so the package stays usable when the
+storage is down; readers fail only when actually called.
+
 ## Basic usage (grid format)
 ```python
 from dstparser import parse_dst_file
 
 dst_file = "/path/to/dst/file.dst.gz"
-data = parse_dst_file(dst_file, up_low_traces=True)
+data = parse_dst_file(dst_file)                  # averaged upper/lower traces
+data = parse_dst_file(dst_file, avg_traces=False)  # keep them separate
 # Use the data dict to dump to an hdf5 file (see dstparser/cli)
 ```
+
+`parse_dst_file` returns only events that **triggered** the detector — a small
+fraction of what a simulated file holds. For every thrown event use
+`dstparser.dst_reader.read_dst_file_all_events`.
+
+TAx4 in grid format: `parse_dst_file_tax4`, same arguments. It is
+`parse_dst_file` with TAx4's detector-id swap, 2080 m spacing, and positions
+taken from the file rather than the TA-SD survey table.
 
 ## vlen format (flat arrays + offsets, used for GNN/DNN training)
 ```python
@@ -63,4 +95,12 @@ Notes:
 - The reader reads `.dst.gz` natively (no manual decompression).
 - TAx4 xmax is not wired in by default (`xmax_dir = None` in the config); set
   `xmax_dir` to the directory holding `DAT*_xmax.txt` to enable it.
-- Regression tests: `tests/test_parser_tax4_vlen.py`.
+
+## Tests
+
+```bash
+pytest tests
+```
+
+Integration tests: they read real DST files from shared storage and skip when
+it is not mounted.
