@@ -16,24 +16,33 @@ data_set_base[(data_set_root + "qgsii04proton/080417_160603/Em1_bsdinfo").strip(
     10010001
 )
 
-data_set_base[
-    (data_set_root + "qgsii03proton/080511_230511/noCuts_HiResSpectrum").strip()
-] = 10010002
+data_set_base[(data_set_root + "qgsii04proton/160604_240422/Em1_bsdinfo").strip()] = (
+    10010002
+)
 
 data_set_base[(data_set_root + "qgsii04helium/080417_160603/Em1_bsdinfo").strip()] = (
     10040001
+)
+
+data_set_base[(data_set_root + "qgsii04helium/160604_240422/Em1_bsdinfo").strip()] = (
+    10040002
 )
 
 data_set_base[(data_set_root + "qgsii04nitrogen/080417_160603/Em1_bsdinfo").strip()] = (
     10140001
 )
 
+data_set_base[(data_set_root + "qgsii04nitrogen/160604_240422/Em1_bsdinfo").strip()] = (
+    10140002
+)
+
 data_set_base[(data_set_root + "qgsii04iron/080417_160603/Em1_bsdinfo").strip()] = (
     10560001
 )
 
-
-data_set_base[(data_set_root + "qgsii03iron/6yrs").strip()] = 10560002
+data_set_base[(data_set_root + "qgsii04iron/160604_240422/Em1_bsdinfo").strip()] = (
+    10560002
+)
 
 
 # Function that adds id fields to h5 files
@@ -83,16 +92,78 @@ def add_event_ids(data, filename):
 # SLURM SETTINGS:
 # -------------------------
 
+
+def filter_data_files(data_files):
+    return data_files
+    # return [
+    #     data_file for data_file in data_files if int(Path(data_file).name[7:9]) < 26
+    # ]
+
+
+njobs = 50
+
+
+def temp_group_id(data_file, file_id=None, len_files=None):
+    """Returns group id for the current file"""
+    import re
+
+    pattern = r"DAT(\d{4})"
+    match = re.search(pattern, Path(data_file).name)
+    if match:
+        group_id = int(match.group(1))
+    else:
+        raise ValueError("Filename pattern does not match")
+
+    return group_id
+
+
+def temp_job_id(job_id):
+    """Returns job id for the current job"""
+    return job_id % njobs
+
+
+group_temp_files_by = 50
+
+
+def final_group_id(data_file, file_id=None, len_files=None):
+    import re
+
+    pattern = r"temp_(\d{5})"
+    match = re.search(pattern, Path(data_file).name)
+    if match:
+        group_id = int(match.group(1)) % group_temp_files_by
+    else:
+        raise ValueError("Filename pattern does not match")
+
+    return group_id
+
+
+def final_job_id(job_id):
+    return job_id % njobs
+
+
+# def filter_data_files(data_files):
+#     return [
+#         data_file for data_file in data_files if int(Path(data_file).name[7:9]) > 25
+#     ]
+
+# skipped_arrays = ["time_traces_low", "time_traces_up"]
+
+# -------------------------
+# SLURM SETTINGS:
+# -------------------------
+
 # Modify settings according your environment
 slurm_settings = {
-    "job-name": "procsh",
+    "job-name": "procsh1",
     "array": "0",
     "ntasks": 1,
     # "exclude": "hpa-wn[11,13]",
+    # "exclude": "hpa-wn[06,11]",
     "mem": "20gb",
     "cpus-per-task": 1,
-    "partition": "edr1_short",
-    "time": "01:00:00",
+    "partition": "edr1-al9_short_serial",
+    "time": "02:00:00",
 }
 
 # -------------------------
@@ -107,8 +178,12 @@ slurm_settings = {
 #     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
 # ]
 
+# data_dirs = [
+#     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/160604_240422/Em1_bsdinfo",
+# ]
+
 data_dirs = [
-    f"{dstbank_root}/tasdmc_dstbank/qgsii03iron/6yrs",
+    f"{dstbank_root}/tasdobs_dstbank/rufldf",
 ]
 
 # Glob patterns to match DST files to be processed
@@ -117,7 +192,7 @@ data_dirs = [
 # glob_patterns = "tasdcalibev*rufldf.dst.gz"
 # glob_patterns = "DAT*dst.gz"
 
-glob_patterns = "DAT*dst.gz"
+# glob_patterns = "DAT*dst.gz"
 
 # List of data files. If this is specified, it overrides 'data_dirs' and 'glob_patterns'
 # Uncomment and specify to use specific files instead of directories
@@ -131,37 +206,22 @@ glob_patterns = "DAT*dst.gz"
 # OUTPUT:
 # -------------------------
 
-# Explanation:
-# The conversion happens in 2 steps.
-# First step "temp pass" converts dst files and writes them in multiple temp files.
-# The original dst files grouped by "temp_group_by" files to produces one temp file.
-# The task is separated between "njobs_temp_pass" slurm jobs.
-
-# The "final pass" merge temporary files to larger files.
-# The temporary files grouped by "final_group_by" files to produce one final file.
-# The task is done by "njobs_final_pass" slurm jobs.
-
-# Temp pass:
-
-# Group original files to temp file by group
-# By default temp_group_by = 26 group energy bins will produce 1000 temp files
-temp_group_by = 26
-# Number of jobs for the step that creates temporary files
-njobs_temp_pass = 50
-
-# Final pass:
-
-# Group/merge temp files by group of final_group_by
-# In default settings divide 1000 files by 50 files = 20 final files
-final_group_by = 5
-# Number of jobs for the step that merge temporary files
-njobs_final_pass = 50
 
 # Prefix for the final file names
 # Example: if file_name_pattern = "prot", output files will be "prot_01.h5", "prot_02.h5", etc.
 file_name_pattern = "final"
 
+data_globs = "tasdcalibev*rufldf.dst.gz"
+xmax_dir = None
+add_shower_params = False
+add_standard_recon = True
+
+temp_ngroups = 1000
+temp_njobs = 50
+final_ngroups = 20
+final_njobs = 20
+
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    f"{training_data_root}/dnn_training_data/2024/10/02_iron_qgsii03/"
+    f"{training_data_root}/dnn_training_data/2025/08/26/01_vlen_ta/"
 )

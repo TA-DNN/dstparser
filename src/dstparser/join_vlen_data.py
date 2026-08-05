@@ -1,5 +1,6 @@
 import numpy as np
 import json
+from dstparser.paths import dstbank_root
 
 
 def append_to_memstore(memstore, data_dict):
@@ -105,7 +106,7 @@ if __name__ == "__main__":
 
     # This is example shows how to append sequencially data to hdf5 file
     # or join data in memory
-    data_dir = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo"
+    data_dir = f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo"
     files = sorted(Path(data_dir).rglob("DAT*dst.gz"))[0:26]
 
     join_in_memory = False

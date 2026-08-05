@@ -4,13 +4,21 @@ import numpy as np
 from tqdm.auto import tqdm
 from pathlib import Path
 from dstparser import parse_dst_file
-from dstparser.xmax_reader import XmaxReader
+from dstparser.xmax_reader.xmax_reader import XmaxReaderTxt
 from dstparser.cli.io import read_h5, save2hdf5
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
 from dstparser.cli.cli import parse_config
-from dstparser import append_to_hdf5, parse_dst_file_vlen
+from dstparser import append_to_hdf5, parse_dst_file_vlen, parse_dst_file_tax4_vlen
 import h5py
+
+
+# vlen adapters selectable from the config via `vlen_adapter` (default "ta").
+# TA-SD and TAx4 share the same vlen pipeline; only the per-file parser differs.
+VLEN_ADAPTERS = {
+    "ta": parse_dst_file_vlen,
+    "tax4": parse_dst_file_tax4_vlen,
+}
 
 
 def process_files(task_function, config):
@@ -67,7 +75,6 @@ def init_xmax_reader(config, init_file=None):
     # use its parent directory as the xmax_dir (default behavior)
     xmax_dir = "parent_dir"
     xmax_glob_pattern = "**/DAT*_xmax.txt"
-    xmax_model = "QGSJetII-04"
 
     # If xmax_dir is set to None, xmax_reader will be None
     # If xmax_dir is set, then only xmax_dir directory will be used
@@ -76,9 +83,6 @@ def init_xmax_reader(config, init_file=None):
 
     if hasattr(config, "xmax_glob_pattern"):
         xmax_glob_pattern = config.xmax_glob_pattern
-
-    if hasattr(config, "xmax_model"):
-        xmax_model = config.xmax_model
 
     update_reader = False
     if xmax_dir == "parent_dir":
@@ -91,9 +95,8 @@ def init_xmax_reader(config, init_file=None):
     if xmax_dir is None:
         xmax_reader = None
     else:
-        xmax_reader = XmaxReader(
-            data_dir=xmax_dir, glob_pattern=xmax_glob_pattern, model=xmax_model
-        )
+        # The hadronic model is detected from the file path in read_file().
+        xmax_reader = XmaxReaderTxt(data_dir=xmax_dir, glob_pattern=xmax_glob_pattern)
 
     return xmax_reader, update_reader
 
@@ -157,6 +160,16 @@ def join_hdf5(ifiles, ofile, config):
 
 
 def dst_to_hdf5_vlen(ifiles, ofile, config):
+    # Pick the vlen parser: "ta" (default, TA-SD) or "tax4". Same pipeline,
+    # same output format; TAx4 just reads its own DST layout (see
+    # parse_dst_file_tax4_vlen). Set `vlen_adapter = "tax4"` in the config.
+    adapter = getattr(config, "vlen_adapter", "ta")
+    if adapter not in VLEN_ADAPTERS:
+        raise ValueError(
+            f"Unknown vlen_adapter {adapter!r}; choose from {sorted(VLEN_ADAPTERS)}"
+        )
+    parse_vlen = VLEN_ADAPTERS[adapter]
+
     xmax_reader, update_reader = init_xmax_reader(config, init_file=ifiles[0])
 
     with h5py.File(ofile, "a") as f:
@@ -168,11 +181,11 @@ def dst_to_hdf5_vlen(ifiles, ofile, config):
                 # Update xmax_reader if the directory of the file changes
                 xmax_reader = update_xmax_reader(xmax_reader, file)
 
-            data = parse_dst_file_vlen(
+            data = parse_vlen(
                 file,
                 xmax_reader=xmax_reader,
-                add_shower_params=True,
-                add_standard_recon=True,
+                add_shower_params=config.add_shower_params,
+                add_standard_recon=config.add_standard_recon,
                 config=config,
             )
 

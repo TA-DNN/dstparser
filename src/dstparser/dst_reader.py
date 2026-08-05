@@ -4,17 +4,34 @@ import subprocess
 from dstparser.env_vars import changed_env_paths, is_alma_linux, is_rocky_linux
 from dstparser.paths import (
     root_dir,
-    dst_reader,
+    dst_reader_add_standard_recon,
+    dst_reader_all_events,
     sd_analysis_env,
     openssl10_alma9,
     openssl10_rocky_linux,
+    root_env_benmc,
 )
+
+
+def _load_env(shell_script, prepend=False):
+    """Source a shell script and copy the path-valued vars it changed into
+    os.environ. With prepend=True, PATH/LD_LIBRARY_PATH are prepended to the
+    current value instead of replacing it (so a second install can be layered
+    on top of the first).
+    """
+    for env_var, path_var in changed_env_paths(str(shell_script)).items():
+        if prepend and env_var in ("PATH", "LD_LIBRARY_PATH") and env_var in os.environ:
+            os.environ[env_var] = f"{path_var}:{os.environ[env_var]}"
+        else:
+            os.environ[env_var] = path_var
 
 
 # Loading environment from "sdanalysis_env.sh"
 sd_analysis_env = str(Path(root_dir) / sd_analysis_env)
-for env_var, path_var in changed_env_paths(sd_analysis_env).items():
-    os.environ[env_var] = path_var
+_load_env(sd_analysis_env)
+# The env script's own `source .../thisroot.sh` line points at a stale mount and
+# silently does nothing, so ROOT must be loaded here explicitly.
+_load_env(root_env_benmc, prepend=True)
 
 # Add path to openssl10 missing libs
 if is_alma_linux():
@@ -26,10 +43,10 @@ if is_rocky_linux():
     os.environ[ld_paths] = f"{openssl10_rocky_linux}:{os.environ[ld_paths]}"
 
 
-def read_dst_file(dst_filename):
+def _run_dst_reader(dst_reader_process, dst_filename):
     try:
         process = subprocess.Popen(
-            [dst_reader, str(dst_filename).strip()],
+            [dst_reader_process, str(dst_filename).strip()],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             universal_newlines=True,
@@ -44,3 +61,14 @@ def read_dst_file(dst_filename):
         print(f'dst_reader error:\n"{error}"')
 
     return output.strip().split("\n")
+
+
+def read_dst_file(dst_filename):
+    return _run_dst_reader(dst_reader_add_standard_recon, dst_filename)
+
+
+def read_dst_file_all_events(dst_filename):
+    # sditerator_printAll.run (benMC install): dumps every THROWN event's
+    # truth + raw SD/waveform data, no reconstruction fields. Use this for
+    # full per-shower statistics including non-triggered throws.
+    return _run_dst_reader(dst_reader_all_events, dst_filename)

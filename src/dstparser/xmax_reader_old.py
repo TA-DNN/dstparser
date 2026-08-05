@@ -55,18 +55,22 @@ def std_ta_energy_grid():
 
 
 class XmaxReader:
-    def __init__(self, data_dir, glob_pattern="**/DAT*_xmax.txt", model="QGSJetII-04"):
+    def __init__(self, data_dir, glob_pattern, model="QGSJetII-04", generate_all=False):
 
         self.data_dir = data_dir
         self.glob_pattern = glob_pattern
         self.model = model
+        self.generate_all = generate_all
 
         self.empty = False
         if self.data_dir is None:
             self.empty = True
             return
 
-        self.elongation_rate = DXMAX_PARAMS[model][1]
+        params = DXMAX_PARAMS[model]
+        self.D = params[1]  # Base elongation rate (per decade)
+        self.delta = params[3]  # Mass-dependence correction
+
         xmax_files = data_files(data_dir=self.data_dir, glob_pattern=self.glob_pattern)
 
         file_idx = []
@@ -133,11 +137,19 @@ class XmaxReader:
     def __call__(self, energies, mass):
         # Getting xmax0 and scaling with energy according <Xmax>
         if (self._xmax0 == 0) or (self._xmax0 is None):
-            print(f"Xmax is generated!")
+            if not self.generate_all:
+                print(f"Xmax is generated!")
             # Generate random Xmax for model and energy
             log10e = energies + 18
             return rand_xmax(log10e, mass, model=self.model)
         else:
-            return self._xmax0 + self.elongation_rate * np.log10(
+
+            # elongation rate with mass dependent correction
+            # for formula ⟨Xmax​⟩=X0​+D(logE−19)+(ξ−ln10D​+δ(logE−19))lnA
+            # It is a tiny correction or the order 0.1 g/cm2
+            eff_elongation = self.D + self.delta * np.log(np.maximum(mass, 1))
+
+            # Scale the realization from the bin center to the sampled energy
+            return self._xmax0 + eff_elongation * np.log10(
                 energies / self._en_bin_center
             )

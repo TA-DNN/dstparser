@@ -10,7 +10,7 @@ def corsika_id2mass(corsika_pid):
 
 def shower_params(data, events, xmax_data):
     # Shower related
-    # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
+    # for details: /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
     to_meters = 1e-2
     # events = dst_data["events"]
     data["mass_number"] = corsika_id2mass(events["rusdmc_.parttype"])
@@ -54,7 +54,7 @@ def standard_recon(
 
     # events = dst_data["events"]
     # Exempt from comments of cpp source code at:
-    # /ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
+    # /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
     # // Reported by DAQ as time of the 1st signal in the triple that caused the triggger.
     # // From now on, everyhting is relative to hhmmss.  Not useful in the event reconstruction.
     # Date of event
@@ -299,14 +299,27 @@ def remove_mismatch(expected, actual, hit_offsets, wf_offsets):
     return mask
 
 
-def detector_readings_flat(dst_file, data, hits, waveforms):
+def detector_readings_flat(dst_file, data, hits, waveforms, badsd=None, add_badsd=True):
+    """Extract detector readings from hits and waveforms.
+
+    Args:
+        dst_file: Path to DST file (for error messages)
+        data: Dictionary to populate with detector data
+        hits: Dictionary with hit data and offsets
+        waveforms: Dictionary with waveform data and offsets
+        badsd: Dictionary with broken detector info (from parse_dst_string)
+        add_badsd: If True, add badsd arrays to output (for CNN grid format)
+
+    Returns:
+        Updated data dictionary
+    """
     # for c = 3e10 cm/s:
     # to_nsec = 4 * 1000
     # The below is more correct for c = 2.998e10 cm/c,
     # to_nsec = 4002.7691424
 
     # check if number folds from hits equal to number of waveforms
-    if np.sum(hits["rufptn_.nfold"]) != waveforms["rusdraw_.xxyy"].shape:
+    if np.sum(hits["rufptn_.nfold"]) != waveforms["rusdraw_.xxyy"].shape[0]:
         num_bad_wf = int(
             waveforms["rusdraw_.xxyy"].shape[0] - np.sum(hits["rufptn_.nfold"])
         )
@@ -336,7 +349,7 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
         mask_matched = remove_mismatch(
             expected_xxyy, actual_xxyy, hit_offsets, waveforms["offsets"]
         )
-                
+
         waveforms_offsets = filter_offsets(mask_matched, waveforms["offsets"])
 
         waveforms = {
@@ -457,7 +470,25 @@ def detector_readings_flat(dst_file, data, hits, waveforms):
     # Devision of flattened time_traces to events
     data["tt_offsets"] = waveforms["offsets"]
 
+    # Add badsd (broken/non-operational detectors) for CNN grid format
+    if add_badsd and badsd is not None:
+        # Store as flat array with offsets (consistent with hits/waveforms structure)
+        data["badsd"] = badsd["bsdinfo_.xxyyout[x]"]  # Detector IDs
+        data["badsd_offsets"] = badsd["offsets"]  # Event boundaries
+
     return data
+
+
+def swap_detector_id(xxyy):
+    """Swap a 2-digit-per-component detector id: yyxx <-> xxyy.
+
+    TAx4's #SD meta block prints the id as yyxx while its #SD waveform block
+    prints xxyy (the TA-SD convention). Without the swap the hits-vs-waveforms
+    check in detector_readings_flat fails.
+    """
+    xxyy = np.asarray(xxyy)
+    assert xxyy.size == 0 or xxyy.max() < 10000, "detector id has >2 digits per component"
+    return (xxyy % 100) * 100 + (xxyy // 100)
 
 
 def parse_dst_file_vlen(
@@ -465,8 +496,15 @@ def parse_dst_file_vlen(
     xmax_reader=None,
     add_shower_params=True,
     add_standard_recon=True,
+    add_badsd=True,
     config=None,
+    swap_detector_ids=False,
 ):
+    """Parse a DST file into the vlen (flat-arrays-with-offsets) format.
+
+    swap_detector_ids: apply the yyxx->xxyy fix to the #SD meta ids. False for
+        TA-SD, True for TAx4 -- see parse_dst_file_tax4_vlen below.
+    """
 
     if not Path(dst_file).exists():
         print(f"File: {dst_file} doesn't exists")
@@ -477,6 +515,9 @@ def parse_dst_file_vlen(
 
     if events is None:
         return None
+
+    if swap_detector_ids:
+        hits["rufptn_.xxyy"] = swap_detector_id(hits["rufptn_.xxyy"])
 
     # Load xmax info for current dst file
     if xmax_reader is not None:
@@ -491,8 +532,22 @@ def parse_dst_file_vlen(
     if add_standard_recon:
         data = standard_recon(data, events)
 
-    data = detector_readings_flat(dst_file, data, hits, waveforms)
+    data = detector_readings_flat(
+        dst_file, data, hits, waveforms, badsd=badsd, add_badsd=add_badsd
+    )
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
     return data
+
+
+def parse_dst_file_tax4_vlen(dst_file, **kwargs):
+    """TAx4 vlen parser -- parse_dst_file_vlen with the detector-id swap.
+
+    TAx4 is read with the same benMC exe as TA-SD, which emits the full 61-field
+    #EVENT record and 12-field #SD meta including rufptn_.nfold, so the output
+    dict has exactly the same keys as parse_dst_file_vlen. The sditerator
+    binaries only print the rufptn_/rufldf_/rusdgeom_ banks already stored in the
+    pass2 (rufldf) DST -- they do not reconstruct anything.
+    """
+    return parse_dst_file_vlen(dst_file, swap_detector_ids=True, **kwargs)
