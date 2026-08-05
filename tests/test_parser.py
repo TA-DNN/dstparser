@@ -4,14 +4,30 @@ from time import time
 from dstparser.cli.cli import parse_config
 import sys
 from dstparser.paths import dstbank_root
+from conftest import require
+
+DST_TA = (
+    f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603/"
+    "Em1_bsdinfo/XXXX03/DAT000003_gea.rufldf.dst.gz"
+)
+DST_TAX4 = (
+    f"{dstbank_root}/tasdmc_dstbank/tax4/qgsii04proton/"
+    "north/240125to240423/DAT010611_gea.rufldf.dst.gz"
+)
 
 
-def test_parser(dst_file, print_read_data=False, use_ta_x4=False, add_xmax=False):
+def test_grid_ta():
+    require(DST_TA)
+    run_parser(DST_TA, use_ta_x4=False)
 
-    if len(sys.argv) > 1:
-        config = parse_config(sys.argv[1])
-    else:
-        config = None
+
+def test_grid_tax4():
+    require(DST_TAX4)
+    run_parser(DST_TAX4, use_ta_x4=True)
+
+
+def run_parser(dst_file, print_read_data=False, use_ta_x4=False, add_xmax=False, config=None):
+
     start = time()
 
     # The only function that are required to parsing
@@ -74,6 +90,8 @@ def test_parser(dst_file, print_read_data=False, use_ta_x4=False, add_xmax=False
 
 
 if __name__ == "__main__":
+    # optional: pass a config file as the first argument
+    cfg = parse_config(sys.argv[1]) if len(sys.argv) > 1 else None
     # dst_file = (
     #     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2/"
     #     "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
@@ -86,14 +104,6 @@ if __name__ == "__main__":
     # !If you want to use TAx4 format, set use_ta_x4=True
     # !If you want to use TA format, set use_ta_x4=False
     # !By default, use_ta_x4=False
-    dst_file = (
-        f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603/"
-        "Em1_bsdinfo/XXXX03/DAT000003_gea.rufldf.dst.gz"
-    )
-    test_parser(dst_file, print_read_data=True, use_ta_x4=False, add_xmax=False)
+    run_parser(config=cfg, dst_file=DST_TA, print_read_data=True, use_ta_x4=False)
 
-    dst_file_tax4 = (
-        f"{dstbank_root}/tasdmc_dstbank/tax4/qgsii04proton/"
-        "north/240125to240423/DAT010611_gea.rufldf.dst.gz"
-    )
-    test_parser(dst_file_tax4, print_read_data=True, use_ta_x4=True, add_xmax=False)
+    run_parser(config=cfg, dst_file=DST_TAX4, print_read_data=True, use_ta_x4=True)

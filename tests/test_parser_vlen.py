@@ -4,14 +4,21 @@ from time import time
 from dstparser.cli.cli import parse_config
 import sys
 from dstparser.paths import dstbank_root
+from conftest import require
+
+DST_VLEN = (
+    f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/080417_160603/"
+    "Em1_bsdinfo/XXXX20/DAT000020_gea.rufldf.dst.gz"
+)
 
 
-def test_parser(dst_file, print_read_data=False, add_xmax=False):
+def test_vlen_ta():
+    require(DST_VLEN)
+    run_parser(DST_VLEN)
 
-    if len(sys.argv) > 1:
-        config = parse_config(sys.argv[1])
-    else:
-        config = None
+
+def run_parser(dst_file, print_read_data=False, add_xmax=False, config=None):
+
     start = time()
 
     # The only function that are required to parsing
@@ -61,6 +68,8 @@ def test_parser(dst_file, print_read_data=False, add_xmax=False):
 
 
 if __name__ == "__main__":
+    # optional: pass a config file as the first argument
+    cfg = parse_config(sys.argv[1]) if len(sys.argv) > 1 else None
     # dst_file = (
     #     f"{dstbank_root}/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2/"
     #     "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
@@ -70,6 +79,4 @@ if __name__ == "__main__":
     # dst_file = f"{dstbank_root}/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
     # dst_file = f"{dstbank_root}/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
 
-    dst_file = f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo/XXXX20/DAT000020_gea.rufldf.dst.gz"
-
-    test_parser(dst_file, print_read_data=True, add_xmax=False)
+    run_parser(config=cfg, dst_file=DST_VLEN, print_read_data=True, add_xmax=False)

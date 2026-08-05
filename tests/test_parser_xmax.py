@@ -4,14 +4,22 @@ from time import time
 from dstparser.cli.cli import parse_config
 import sys
 from dstparser.paths import dstbank_root, training_data_root
+from conftest import require
+
+DST_XMAX = (
+    f"{dstbank_root}/tasdmc_dstbank/qgsii04nitrogen/160604_240422/"
+    "Em1_bsdinfo/XXXX22/DAT000022_gea.rufldf.dst.gz"
+)
+XMAX_DB_DIR = f"{training_data_root}/dnn_training_data/2026/02/xmax_db"
 
 
-def test_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=False):
+def test_vlen_with_xmax_db():
+    require(DST_XMAX, f"{XMAX_DB_DIR}/qgsii04_xmax_db.h5")
+    run_parser(DST_XMAX, parse_type="vlen_ta", add_xmax=True)
 
-    if len(sys.argv) > 1:
-        config = parse_config(sys.argv[1])
-    else:
-        config = None
+
+def run_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=False, config=None):
+
     start = time()
 
     # The only function that are required to parsing
@@ -97,6 +105,8 @@ def test_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=
 
 
 if __name__ == "__main__":
+    # optional: pass a config file as the first argument
+    cfg = parse_config(sys.argv[1]) if len(sys.argv) > 1 else None
     # dst_file = (
     #     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2/"
     #     "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
@@ -105,8 +115,7 @@ if __name__ == "__main__":
     # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT051419_gea.rufldf.dst.gz"
     # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
     # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_EPOS_p/p2/DAT000623.corsika77420.EPOS.tar.gz.spctr1.1745.noCuts.dst.gz"
-    dst_file = f"{dstbank_root}/tasdmc_dstbank/qgsii04nitrogen/160604_240422/Em1_bsdinfo/XXXX22/DAT000022_gea.rufldf.dst.gz"
     # !If you want to use TAx4 format, set use_ta_x4=True
     # !If you want to use TA format, set use_ta_x4=False
     # !By default, use_ta_x4=False
-    test_parser(dst_file, print_read_data=True, parse_type="vlen_ta", add_xmax=True)
+    run_parser(config=cfg, dst_file=DST_XMAX, print_read_data=True, parse_type="vlen_ta", add_xmax=True)
