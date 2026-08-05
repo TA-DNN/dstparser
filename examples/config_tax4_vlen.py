@@ -5,9 +5,8 @@ Run with the dstparser CLI (SLURM):
 or drive the two passes directly (see dstparser README "TAx4" section) for a
 non-SLURM / single-node run.
 
-No prerequisites: TAx4 is read with the same benMC exe as TA-SD. The only TAx4
-difference in the whole vlen path is the yyxx->xxyy detector-id swap, which
-`vlen_adapter = "tax4"` below selects (parse_dst_file_tax4_vlen).
+`vlen_adapter = "tax4"` below selects parse_dst_file_tax4_vlen, which differs
+from the TA-SD parser only by the yyxx->xxyy detector-id swap.
 """
 from pathlib import Path
 import re

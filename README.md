@@ -31,12 +31,10 @@ with h5py.File("out.h5", "a") as f:
 TAx4 uses the **same vlen format** as TA-SD via `parse_dst_file_tax4_vlen`, and
 the output dict has **exactly the same keys** as `parse_dst_file_vlen`.
 
-**No special reader, no build step.** TAx4 is read with the same benMC exe as
-TA-SD, which emits the full 61-field `#EVENT` record and 12-field `#SD meta`
-including `rufptn_.nfold`. `parse_dst_file_tax4_vlen` is simply
-`parse_dst_file_vlen(..., swap_detector_ids=True)`: TAx4's `#SD meta` block
-prints the detector id as `yyxx` while its waveform block uses `xxyy`, and that
-swap is the only TAx4-specific step in the whole vlen path.
+TAx4 is read with the same reader as TA-SD, and
+`parse_dst_file_tax4_vlen` is `parse_dst_file_vlen(..., swap_detector_ids=True)`.
+TAx4's `#SD meta` block prints the detector id as `yyxx` while its waveform
+block uses `xxyy`; that swap is the only TAx4-specific step in the vlen path.
 
 **Convert (Python API):**
 ```python
@@ -64,7 +62,5 @@ parser. The individual workers (`dst_to_hdf5_vlen`, `join_hdf5_vlen` in
 Notes:
 - The reader reads `.dst.gz` natively (no manual decompression).
 - TAx4 xmax is not wired in by default (`xmax_dir = None` in the config); set
-  `xmax_dir` to enable it. (The shared `init_xmax_reader` xmax code has a
-  separate pre-existing staleness vs the refactored `xmax_reader` package — only
-  relevant when xmax is enabled.)
+  `xmax_dir` to the directory holding `DAT*_xmax.txt` to enable it.
 - Regression tests: `tests/test_parser_tax4_vlen.py`.

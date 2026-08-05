@@ -1,7 +1,6 @@
 """Regression test for the TAx4 vlen path (parse_dst_file_tax4_vlen).
 
-Integration test: needs the shared TAx4 DST files. No special reader -- TAx4 is
-read with the same benMC exe as TA-SD, and parse_dst_file_tax4_vlen is just
+Integration test: needs the shared TAx4 DST files. parse_dst_file_tax4_vlen is
 parse_dst_file_vlen with the yyxx->xxyy detector-id swap.
 """
 import numpy as np
@@ -63,11 +62,7 @@ def test_tax4_detector_ids_swapped():
 
 
 def test_tax4_vlen_format_parity():
-    """TAx4 vlen keys == TA-SD vlen keys, exactly.
-
-    Was NOT true while TAx4 went through the TALE reader (it could not emit
-    std_recon_nsclust/nhits/nborder/qtot). With the benMC exe the key sets match.
-    """
+    """TAx4 vlen keys == TA-SD vlen keys, exactly."""
     tax4 = parse_dst_file_tax4_vlen(TAX4_DST)
     ta = parse_dst_file_vlen(TA_DST)
     assert set(tax4) == set(ta), (

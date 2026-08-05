@@ -8,11 +8,9 @@ from pathlib import Path
 
 def parse_sdmeta_tax4(sdmeta_list_str):
     """
-    #SD meta DATA has 11 fields/hit for BOTH TAx4 readers (printAll and the
-    TALE install's add_standard_recon), NOT 12 like TA-SD's own
-    add_standard_recon_v2 -- no `nfold` field is emitted for TAx4
-    (sditerator_cppanalysis_printAll.cpp:38-43 and
-    sditerator_cppanalysis_add_standard_recon.cpp:49-54):
+    printAll's #SD meta DATA has 11 fields/hit, NOT 12 like
+    add_standard_recon_v2 -- it emits no `nfold` field
+    (sditerator_cppanalysis_printAll.cpp:38-43):
         xxyy, isgood, reltime[0], reltime[1], pulsa[0], pulsa[1],
         xyzclf[0], xyzclf[1], xyzclf[2], vem[0], vem[1]
     CAVEAT: in printAll's variant specifically, the vem[1] slot is actually a

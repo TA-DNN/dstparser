@@ -4,14 +4,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from pathlib import Path
 from dstparser import parse_dst_file
-# NOTE (pre-existing staleness, flagged not fixed here): the xmax_reader package
-# was refactored -- XmaxReader is now an ABSTRACT base (concrete: XmaxReaderTxt)
-# and no longer takes a `model` arg (model is auto-detected in read_file). So
-# init_xmax_reader()'s `XmaxReader(data_dir=..., glob_pattern=..., model=...)`
-# call below is stale and will fail IF xmax is enabled. It is only reached when
-# xmax_dir is set; the TAx4 vlen path uses xmax_dir=None, so it is not hit. Left
-# for a separate xmax-focused fix.
-from dstparser.xmax_reader.xmax_reader import XmaxReader
+from dstparser.xmax_reader.xmax_reader import XmaxReaderTxt
 from dstparser.cli.io import read_h5, save2hdf5
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
@@ -82,7 +75,6 @@ def init_xmax_reader(config, init_file=None):
     # use its parent directory as the xmax_dir (default behavior)
     xmax_dir = "parent_dir"
     xmax_glob_pattern = "**/DAT*_xmax.txt"
-    xmax_model = "QGSJetII-04"
 
     # If xmax_dir is set to None, xmax_reader will be None
     # If xmax_dir is set, then only xmax_dir directory will be used
@@ -91,9 +83,6 @@ def init_xmax_reader(config, init_file=None):
 
     if hasattr(config, "xmax_glob_pattern"):
         xmax_glob_pattern = config.xmax_glob_pattern
-
-    if hasattr(config, "xmax_model"):
-        xmax_model = config.xmax_model
 
     update_reader = False
     if xmax_dir == "parent_dir":
@@ -106,9 +95,8 @@ def init_xmax_reader(config, init_file=None):
     if xmax_dir is None:
         xmax_reader = None
     else:
-        xmax_reader = XmaxReader(
-            data_dir=xmax_dir, glob_pattern=xmax_glob_pattern, model=xmax_model
-        )
+        # The hadronic model is detected from the file path in read_file().
+        xmax_reader = XmaxReaderTxt(data_dir=xmax_dir, glob_pattern=xmax_glob_pattern)
 
     return xmax_reader, update_reader
 
