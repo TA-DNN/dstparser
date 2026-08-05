@@ -67,7 +67,7 @@ def rec_coreposition_to_CLF_meters(core_position_rec, option):
 
 def shower_params(data, dst_lists, xmax_data):
     # Shower related
-    # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
+    # for details: /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
     to_meters = 1e-2
     event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])

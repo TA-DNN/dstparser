@@ -1,13 +1,14 @@
 from pathlib import Path
 import re
 import numpy as np
+from dstparser.paths import dstbank_root, training_data_root
 
 # -------------------------
 # EVENT ID SCHEME:
 # -------------------------
 
 # Provide numerical code for data set
-# data_set_root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+# data_set_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
 data_set_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
 data_set_base = dict()
 
@@ -151,12 +152,12 @@ slurm_settings = {
 # Uncomment or modify to specify your own directories
 # Example:
 # data_dirs = [
-#     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
-#     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+#     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
+#     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
 # ]
 
 data_dirs = [
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii03proton/080511_230511/noCuts_HiResSpectrum",
+    f"{dstbank_root}/tasdmc_dstbank/qgsii03proton/080511_230511/noCuts_HiResSpectrum",
 ]
 
 # Glob patterns to match DST files to be processed
@@ -186,5 +187,5 @@ file_name_pattern = "final"
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/12/qgsii03_std/prot/"
+    f"{training_data_root}/dnn_training_data/2024/12/qgsii03_std/prot/"
 )

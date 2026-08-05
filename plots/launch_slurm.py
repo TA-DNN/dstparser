@@ -1,8 +1,9 @@
 from pathlib import Path
 from srecog.slurm.slurm_launcher import output_env, run_job
+from dstparser.paths import training_data_root
 
 
-root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/03"
+root_dir = f"{training_data_root}/dnn_training_data/2024/03"
 out_dir = root_dir + "/03_ttrace_movie/08_TA_9x9"
 res_name = "proc"
 res_dir = out_dir + f"/results/{res_name}"
@@ -23,7 +24,7 @@ slurm_directives = {
 }
 
 python_script = (
-    "/ceph/work/SATORI/antonpr/ml"
+    "/ceph/sharedfs/work/SATORI/antonpr/ml"
     "/erdmann/dstparser/tasks/03_trace_all/visualize_traces.py"
 )
 

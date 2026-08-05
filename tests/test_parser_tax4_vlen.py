@@ -9,20 +9,20 @@ identical #EVENT fields 0-41].
 """
 import numpy as np
 from dstparser import parse_dst_file_tax4_vlen, parse_dst_file_vlen
-from dstparser.paths import ceph_root
+from dstparser.paths import dstbank_root
 
 # TAx4 proton files that contain triggered (nofwf>0) events -- both sub-arrays
 TAX4_DST = (
-    f"{ceph_root}/tasdmc_dstbank/tax4/"
+    f"{dstbank_root}/tasdmc_dstbank/tax4/"
     "qgsii04proton/north/240125to240423/DAT010611_gea.rufldf.dst.gz"
 )
 TAX4_DST_SOUTH = (
-    f"{ceph_root}/tasdmc_dstbank/tax4/"
+    f"{dstbank_root}/tasdmc_dstbank/tax4/"
     "qgsii04proton/south/240125to240423/DAT000011_gea.rufldf.dst.gz"
 )
 # a TA-SD file, to check vlen key-set parity
 TA_DST = (
-    f"{ceph_root}/tasdmc_dstbank/"
+    f"{dstbank_root}/tasdmc_dstbank/"
     "qgsii04proton/080417_160603/Em1_bsdinfo/XXXX03/DAT000003_gea.rufldf.dst.gz"
 )
 

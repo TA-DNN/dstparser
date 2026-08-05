@@ -3,6 +3,7 @@ from dstparser import parse_dst_file, parse_dst_file_tax4, parse_dst_file_vlen
 from time import time
 from dstparser.cli.cli import parse_config
 import sys
+from dstparser.paths import dstbank_root, training_data_root
 
 
 def test_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=False):
@@ -29,7 +30,7 @@ def test_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=
     # if add_xmax:
     #     from dstparser.xmax_reader import XmaxReader
 
-    #     xmax_dir = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo"
+    #     xmax_dir = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo"
     #     xmax_reader = XmaxReader(xmax_dir, "**/DAT*_xmax.txt", "QGSJetII-04")
     # else:
     #     xmax_reader = None
@@ -38,8 +39,8 @@ def test_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=
         from dstparser.xmax_reader.xmax_reader import create_xmax_reader
 
         xmax_dbs = {
-            "eposlhc": "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2026/02/xmax_db/eposlhc_xmax_db.h5",
-            "qgsjetii04": "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2026/02/xmax_db/qgsii04_xmax_db.h5",
+            "eposlhc": f"{training_data_root}/dnn_training_data/2026/02/xmax_db/eposlhc_xmax_db.h5",
+            "qgsjetii04": f"{training_data_root}/dnn_training_data/2026/02/xmax_db/qgsii04_xmax_db.h5",
         }
         xmax_reader = create_xmax_reader(xmax_dbs)
     else:
@@ -97,14 +98,14 @@ def test_parser(dst_file, print_read_data=False, parse_type="vlen_ta", add_xmax=
 
 if __name__ == "__main__":
     # dst_file = (
-    #     "/ceph/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2/"
+    #     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_SIBYLL_fe/p2/"
     #     "DAT013520.corsika77420.SIBYLL.tar.gz.spctr1.1945.noCuts.dst.gz"
     # )
-    # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT055402_gea.rufldf.dst.gz"
-    # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT051419_gea.rufldf.dst.gz"
-    # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
-    # dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_EPOS_p/p2/DAT000623.corsika77420.EPOS.tar.gz.spctr1.1745.noCuts.dst.gz"
-    dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/160604_240422/Em1_bsdinfo/XXXX22/DAT000022_gea.rufldf.dst.gz"
+    # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT055402_gea.rufldf.dst.gz"
+    # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo/DAT051419_gea.rufldf.dst.gz"
+    # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
+    # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_EPOS_p/p2/DAT000623.corsika77420.EPOS.tar.gz.spctr1.1745.noCuts.dst.gz"
+    dst_file = f"{dstbank_root}/tasdmc_dstbank/qgsii04nitrogen/160604_240422/Em1_bsdinfo/XXXX22/DAT000022_gea.rufldf.dst.gz"
     # !If you want to use TAx4 format, set use_ta_x4=True
     # !If you want to use TA format, set use_ta_x4=False
     # !By default, use_ta_x4=False

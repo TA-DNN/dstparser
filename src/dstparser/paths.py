@@ -1,54 +1,67 @@
 """Machine-dependent paths.
 
-Everything that lives on the shared SATORI storage is derived from ONE root
-(`ceph_root`) so a remount is a single-line change. The mount point has already
-moved twice: /ceph/sharedfs/work/... -> /ceph/work/... -> back to
-/ceph/sharedfs/work/... during the 2026-07-24 downtime. Override per machine
-with $DSTPARSER_CEPH_ROOT.
+Three category roots, because the things they point at can move independently:
+software installs, input DST banks, and outputs. All three default to the same
+TA project area (`ta_root`), so a remount is still a one-line change -- but you
+can, say, build sdanalysis locally while the dstbanks stay on shared storage.
 
-Every reader used here is a binary on that shared storage -- nothing has to be
+    ta_root              $DSTPARSER_TA_ROOT           the TA project area
+    +-- sdanalysis_root  $DSTPARSER_SDANALYSIS_ROOT   benMC, TALE install, ROOT
+    +-- dstbank_root     $DSTPARSER_DSTBANK_ROOT      tasdmc/tasdobs dstbanks
+    +-- training_data_root $DSTPARSER_TRAINING_ROOT   dnn_training_data outputs
+
+The mount point has already moved twice (/ceph/sharedfs/work/... ->
+/ceph/work/... -> back to /ceph/sharedfs/work/... in the 2026-07-24 downtime),
+which is why none of these names mention the storage they happen to sit on.
+
+Every reader used here is a binary under sdanalysis_root -- nothing has to be
 built locally, including for TAx4 (see the note further down).
 """
 
 import os
 from pathlib import Path
 
-# Root of the shared SATORI project area on ceph
-ceph_root = os.environ.get(
-    "DSTPARSER_CEPH_ROOT", "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP"
+# The TA project area: the default base for all three category roots below.
+ta_root = os.environ.get(
+    "DSTPARSER_TA_ROOT", "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP"
 )
 
-# Root path to the directory with data
-root_dir = f"{ceph_root}/benMC/sdanalysis_2019"
+# Software installs: sdanalysis (benMC + TALE), ROOT, openssl10.
+sdanalysis_root = os.environ.get("DSTPARSER_SDANALYSIS_ROOT", ta_root)
+# Input data: tasdmc_dstbank, tasdobs_dstbank, INR_group.
+dstbank_root = os.environ.get("DSTPARSER_DSTBANK_ROOT", ta_root)
+# Outputs: dnn_training_data.
+training_data_root = os.environ.get("DSTPARSER_TRAINING_ROOT", ta_root)
+
+# Root path to the sdanalysis install providing the DST readers
+root_dir = f"{sdanalysis_root}/benMC/sdanalysis_2019"
 dst_reader = "sditerator_no_standard_recon.run"
 dst_reader_add_standard_recon = "sditerator_add_standard_recon_v2.run"
 dst_reader_all_events = "sditerator_printAll.run"
 
 sd_analysis_env = "sdanalysis_env.sh"
 
-# Both sdanalysis_env.sh scripts on ceph still `source` ROOT from the OLD
-# /ceph/work/... mount, which disappeared in the 2026-07-24 downtime. They live
-# on read-only shared storage and are not ours to edit, so ROOT is set up here
-# explicitly, after the install env, instead. [verified 2026-08-05: without
-# this every reader dies with "libCore.so: cannot open shared object file"]
-root_env_benmc = f"{ceph_root}/install/root/bin/thisroot.sh"
-root_env_tax4 = f"{ceph_root}/root/bin/thisroot.sh"
-openssl10_alma9 = f"{ceph_root}/benMC/libs_alma9/openssl10"
-openssl10_rocky_linux = f"{ceph_root}/benMC/libs_rocky_linux/openssl10"
+# Both sdanalysis_env.sh scripts on shared storage still `source` ROOT from the
+# OLD /ceph/work/... mount, which disappeared in the 2026-07-24 downtime. They
+# are read-only and not ours to edit, so ROOT is set up here explicitly, after
+# the install env, instead. [verified 2026-08-05: without this every reader dies
+# with "libCore.so: cannot open shared object file"]
+root_env_benmc = f"{sdanalysis_root}/install/root/bin/thisroot.sh"
+root_env_tax4 = f"{sdanalysis_root}/root/bin/thisroot.sh"
+openssl10_alma9 = f"{sdanalysis_root}/benMC/libs_alma9/openssl10"
+openssl10_rocky_linux = f"{sdanalysis_root}/benMC/libs_rocky_linux/openssl10"
 
 # Data for xmax
 xmax_data_files = "DAT*_xmax.txt"
-xmax_data_dir_prot = f"{ceph_root}/tasdmc_dstbank/qgsii04proton/080417_160603/Em1/"
+xmax_data_dir_prot = f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603/Em1/"
 
-xmax_data_dir_fe = f"{ceph_root}/tasdmc_dstbank/qgsii04iron/080417_160603/Em1/"
+xmax_data_dir_fe = f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/080417_160603/Em1/"
 
-# TAx4 standard reconstruction lives in a SEPARATE sdanalysis install, built
-# for TAx4/TALE geometry -- NOT benMC/sdanalysis_2019 above (that one's
-# add_standard_recon_v2 rejects TAx4 events; verified 2026-07-20). This
-# install's own rufptn.run/rufldf.run pass1/pass2 chain produced a real
-# (if smaller-field) reconstruction: LDF-fit energy, S800, core, geometry-fit
-# direction, border distance.
-root_dir_tax4_std_recon = f"{ceph_root}/sdanalysis_2018_TALE_TAx4SingleCT_DM"
+# TAx4 standard reconstruction lives in a SEPARATE sdanalysis install, built for
+# TAx4/TALE geometry. Its own rufptn.run/rufldf.run pass1/pass2 chain produced a
+# reconstruction: LDF-fit energy, S800, core, geometry-fit direction, border
+# distance.
+root_dir_tax4_std_recon = f"{sdanalysis_root}/sdanalysis_2018_TALE_TAx4SingleCT_DM"
 dst_reader_tax4_std_recon = "sditerator_add_standard_recon.run"
 
 # NOTE (2026-08-05): the TALE reader above is used ONLY by the old grid-tile

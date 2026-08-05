@@ -26,7 +26,7 @@ def rec_coreposition_to_CLF_meters(core_position_rec, option):
 
 def shower_params(data, dst_lists, xmax_data):
     # Shower related
-    # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
+    # for details: /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
     to_meters = 1e-2
     event_list = dst_lists[0]
     data["mass_number"] = corsika_id2mass(event_list[0])
@@ -53,7 +53,7 @@ def shower_params(data, dst_lists, xmax_data):
 def standard_recon(data, dst_lists):
     event_list = dst_lists[0]
     # Exempt from comments of cpp source code at:
-    # /ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
+    # /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
     # // Reported by DAQ as time of the 1st signal in the triple that caused the triggger.
     # // From now on, everyhting is relative to hhmmss.  Not useful in the event reconstruction.
     # Date of event

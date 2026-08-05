@@ -12,8 +12,8 @@ difference in the whole vlen path is the yyxx->xxyy detector-id swap, which
 from pathlib import Path
 import re
 import numpy as np
+from dstparser.paths import dstbank_root, training_data_root
 
-from dstparser.paths import ceph_root
 
 # -------------------------
 # ADAPTER
@@ -51,7 +51,7 @@ def add_event_ids(data, filename):
 # -------------------------
 # INPUT
 # -------------------------
-_base = f"{ceph_root}/tasdmc_dstbank/tax4/qgsii04proton"
+_base = f"{dstbank_root}/tasdmc_dstbank/tax4/qgsii04proton"
 data_dirs = [
     f"{_base}/north/221101to240124",
     f"{_base}/north/240125to240423",
@@ -63,7 +63,7 @@ data_globs = "DAT*_gea.rufldf.dst.gz"
 # -------------------------
 # OUTPUT
 # -------------------------
-output_dir = f"{ceph_root}/dnn_training_data/2026/07/tax4_qgsii04proton_vlen"
+output_dir = f"{training_data_root}/dnn_training_data/2026/07/tax4_qgsii04proton_vlen"
 
 # pass1: DST -> temp_files/temp_NNNNN.h5 ; pass2: temp -> final_files/final_NNNNN.h5
 temp_ngroups = 400      # ~how many DST files per temp file (tune to file count)

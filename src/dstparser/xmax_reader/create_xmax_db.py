@@ -2,6 +2,7 @@ from pathlib import Path
 from collections import defaultdict
 import numpy as np
 import pandas as pd
+from dstparser.paths import dstbank_root, training_data_root
 
 
 model_prefix_map_global = {
@@ -140,10 +141,10 @@ def create_xmax_db(root, model_prefix, xmax_db):
 
 
 def task_create_db():
-    root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank"
+    root = f"{dstbank_root}/tasdmc_dstbank"
 
     model_prefixes = ["qgsii04", "eposlhc_"]
-    output_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2026/02/xmax_db"
+    output_dir = f"{training_data_root}/dnn_training_data/2026/02/xmax_db"
     output_dir = Path(output_dir)
 
     for model_prefix in model_prefixes:
@@ -155,7 +156,7 @@ def task_create_db():
 
 def task_test_read():
 
-    root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank"
+    root = f"{dstbank_root}/tasdmc_dstbank"
     model_prefix = "eposlhc_"
     xmax_db = Path(__file__).parent / "eposlhc_xmax_db.h5"
 

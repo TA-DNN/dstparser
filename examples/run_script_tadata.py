@@ -1,13 +1,14 @@
 from pathlib import Path
 import re
 import numpy as np
+from dstparser.paths import dstbank_root, training_data_root
 
 # -------------------------
 # EVENT ID SCHEME:
 # -------------------------
 
 # Provide numerical code for data set
-# data_set_root = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+# data_set_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
 data_set_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
 data_set_base = dict()
 
@@ -173,16 +174,16 @@ slurm_settings = {
 # Uncomment or modify to specify your own directories
 # Example:
 # data_dirs = [
-#     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
-#     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
+#     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/080417_160603/Em1_bsdinfo",
+#     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/080417_160603/Em1_bsdinfo",
 # ]
 
 # data_dirs = [
-#     "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/160604_240422/Em1_bsdinfo",
+#     "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04proton/160604_240422/Em1_bsdinfo",
 # ]
 
 data_dirs = [
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdobs_dstbank/rufldf",
+    f"{dstbank_root}/tasdobs_dstbank/rufldf",
 ]
 
 # Glob patterns to match DST files to be processed
@@ -222,5 +223,5 @@ final_njobs = 20
 
 # Directory to save all logs, temporary, and final files. Created automatically if not exist
 output_dir = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2025/08/26/01_vlen_ta/"
+    f"{training_data_root}/dnn_training_data/2025/08/26/01_vlen_ta/"
 )

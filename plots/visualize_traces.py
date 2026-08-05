@@ -10,6 +10,7 @@ from tile_movie import tile_signal_movie
 from pathlib import Path
 import os
 import sys
+from dstparser.paths import training_data_root
 
 
 def slurm_parameters():
@@ -66,7 +67,7 @@ def run_make_movies():
     print(f"task_id = {task_id}")
     print(f"ntasks = {ntasks}")
 
-    data_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/03/01_TA_dst/02_uplow_traces9x9/results/proc"
+    data_dir = f"{training_data_root}/dnn_training_data/2024/03/01_TA_dst/02_uplow_traces9x9/results/proc"
     proc_files = data_files(data_dir=data_dir, glob_pattern="**/DAT*.h5")
 
     data_file = proc_files[task_id]
@@ -88,12 +89,12 @@ def run_make_movies():
 
 def test():
 
-    root_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/03"
+    root_dir = f"{training_data_root}/dnn_training_data/2024/03"
     out_dir = root_dir + "/03_ttrace_movie/01_TA_9x9"
     res_name = "proc"
     res_dir = out_dir + f"/results/{res_name}"
 
-    data_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2024/03/01_TA_dst/02_uplow_traces9x9/results/proc"
+    data_dir = f"{training_data_root}/dnn_training_data/2024/03/01_TA_dst/02_uplow_traces9x9/results/proc"
     proc_files = data_files(data_dir=data_dir, glob_pattern="**/DAT*.h5")
 
     task_id = 0

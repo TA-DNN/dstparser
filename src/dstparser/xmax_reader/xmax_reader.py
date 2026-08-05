@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 
 
 from dstparser.xmax_reader.xmax_auger import DXMAX_PARAMS
+from dstparser.paths import dstbank_root
 
 
 class DstPathParser:
@@ -468,12 +469,12 @@ def create_xmax_reader(source, **kwargs):
 
 if __name__ == "__main__":
 
-    # filepath = "/ceph/work/SATORI/projects/TA-ASIoP/INR_group/cluster82/grisha/tasdmc_EPOS_p/p2/DAT000623.corsika77420.EPOS.tar.gz.spctr1.1745.noCuts.dst.gz"
-    # filepath = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/160604_240422/Em1_bsdinfo/XXXX22/DAT003022_gea.rufldf.dst.gz"
-    filepath = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/160604_240422/Em1_bsdinfo/XXXX13/DAT006413_gea.rufldf.dst.gz"
+    # filepath = f"{dstbank_root}/INR_group/cluster82/grisha/tasdmc_EPOS_p/p2/DAT000623.corsika77420.EPOS.tar.gz.spctr1.1745.noCuts.dst.gz"
+    # filepath = f"{dstbank_root}/tasdmc_dstbank/qgsii04nitrogen/160604_240422/Em1_bsdinfo/XXXX22/DAT003022_gea.rufldf.dst.gz"
+    filepath = f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/160604_240422/Em1_bsdinfo/XXXX13/DAT006413_gea.rufldf.dst.gz"
 
     rr = XmaxReaderTxt(
-        "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04iron/160604_240422"
+        f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/160604_240422"
     )
     rr.read_file(filepath)
 

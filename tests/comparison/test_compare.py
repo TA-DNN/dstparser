@@ -2,8 +2,9 @@ from tqdm import tqdm
 import numpy as np
 from dstparser import parse_dst_file
 from dstParser import parse_script
+from dstparser.paths import sdanalysis_root
 
-dst_file = "/ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/DAT000015_gea.dat.hrspctr.1850.specCuts.dst.gz"
+dst_file = f"{sdanalysis_root}/sdanalysis_2018_TALE_TAx4SingleCT_DM/DAT000015_gea.dat.hrspctr.1850.specCuts.dst.gz"
 
 data0 = parse_dst_file(dst_file)
 data1 = parse_script(dst_file)

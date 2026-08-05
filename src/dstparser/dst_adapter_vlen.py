@@ -10,7 +10,7 @@ def corsika_id2mass(corsika_pid):
 
 def shower_params(data, events, xmax_data):
     # Shower related
-    # for details: /ceph/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
+    # for details: /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/sdanalysis_2018_TALE_TAx4SingleCT_DM/sditerator/src/sditerator_cppanalysis.cpp
     to_meters = 1e-2
     # events = dst_data["events"]
     data["mass_number"] = corsika_id2mass(events["rusdmc_.parttype"])
@@ -54,7 +54,7 @@ def standard_recon(
 
     # events = dst_data["events"]
     # Exempt from comments of cpp source code at:
-    # /ceph/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
+    # /ceph/sharedfs/work/SATORI/projects/TA-ASIoP/benMC/sdanalysis_2019/sdmc/sdmc_spctr.c
     # // Reported by DAQ as time of the 1st signal in the triple that caused the triggger.
     # // From now on, everyhting is relative to hhmmss.  Not useful in the event reconstruction.
     # Date of event
