@@ -33,14 +33,24 @@ _load_env(sd_analysis_env)
 # silently does nothing, so ROOT must be loaded here explicitly.
 _load_env(root_env_benmc, prepend=True)
 
-# Add path to openssl10 missing libs
+# Add path to openssl10 missing libs.
+# LD_LIBRARY_PATH is normally set by the env script sourced above, but if that
+# script is unreachable (storage down, or a root pointed elsewhere) it is unset
+# -- use .get() so importing dstparser still works. Readers will fail when
+# actually called; importing must not.
+_LD = "LD_LIBRARY_PATH"
+
+
+def _prepend_ld_path(directory):
+    current = os.environ.get(_LD, "")
+    os.environ[_LD] = f"{directory}:{current}" if current else directory
+
+
 if is_alma_linux():
-    ld_paths = "LD_LIBRARY_PATH"
-    os.environ[ld_paths] = f"{openssl10_alma9}:{os.environ[ld_paths]}"
+    _prepend_ld_path(openssl10_alma9)
 
 if is_rocky_linux():
-    ld_paths = "LD_LIBRARY_PATH"
-    os.environ[ld_paths] = f"{openssl10_rocky_linux}:{os.environ[ld_paths]}"
+    _prepend_ld_path(openssl10_rocky_linux)
 
 
 def _run_dst_reader(dst_reader_process, dst_filename):

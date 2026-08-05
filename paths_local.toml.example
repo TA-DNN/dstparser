@@ -1,0 +1,25 @@
+# Per-checkout path overrides for dstparser.
+#
+#   cp paths_local.toml.example paths_local.toml
+#
+# paths_local.toml is git-ignored, so your settings stay yours. Every key is
+# optional: anything you leave out falls back to the built-in default in
+# src/dstparser/paths.py. An environment variable beats this file.
+#
+# Check what actually resolved:
+#
+#   python -m dstparser.paths
+
+# The TA project area. Set this alone if everything lives under one root --
+# the three category roots below default to it.
+# ta_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP"
+
+# sdanalysis install, ROOT and openssl10. Point this at your own build if you
+# compile sdanalysis yourself.
+# sdanalysis_root = "/home/me/local/sdanalysis"
+
+# Input data: tasdmc_dstbank, tasdobs_dstbank, INR_group.
+# dstbank_root = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP"
+
+# Outputs: dnn_training_data, dnn_inference.
+# training_data_root = "/scratch/me/dnn_training_data"

@@ -1,3 +1,6 @@
 **/__pycache__
 *.ipynb_checkpoints
 *.egg-info
+
+# Per-checkout path overrides (see paths_local.toml.example)
+/paths_local.toml
