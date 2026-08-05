@@ -1,21 +1,28 @@
-"""Regression test for the TAx4 vlen adapter (parse_dst_file_tax4_vlen).
+"""Regression test for the TAx4 vlen path (parse_dst_file_tax4_vlen).
 
-Integration test: needs the ceph TAx4 DST files AND the locally-built
-nfold-emitting reader (see tax4_reader_build/build.sh). Mirrors
-test_parser_vlen.py but with assertions on the invariants that matter for the
-vlen format.
+Integration test: needs the ceph TAx4 DST files. It needs NO special reader --
+TAx4 is read with the same benMC exe as TA-SD; parse_dst_file_tax4_vlen is just
+parse_dst_file_vlen with the yyxx->xxyy detector-id swap
+[established, verified 2026-08-05, method: benMC exe vs the TALE-install exe on
+40 TAx4 files (north+south, 976 events) -- identical counts, identical #SD meta,
+identical #EVENT fields 0-41].
 """
 import numpy as np
 from dstparser import parse_dst_file_tax4_vlen, parse_dst_file_vlen
+from dstparser.paths import ceph_root
 
-# a TAx4 proton file that contains triggered (nofwf>0) events
+# TAx4 proton files that contain triggered (nofwf>0) events -- both sub-arrays
 TAX4_DST = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/"
-    "qgsii04proton/north/240125to240423/DAT000011_gea.rufldf.dst.gz"
+    f"{ceph_root}/tasdmc_dstbank/tax4/"
+    "qgsii04proton/north/240125to240423/DAT010611_gea.rufldf.dst.gz"
+)
+TAX4_DST_SOUTH = (
+    f"{ceph_root}/tasdmc_dstbank/tax4/"
+    "qgsii04proton/south/240125to240423/DAT000011_gea.rufldf.dst.gz"
 )
 # a TA-SD file, to check vlen key-set parity
 TA_DST = (
-    "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/"
+    f"{ceph_root}/tasdmc_dstbank/"
     "qgsii04proton/080417_160603/Em1_bsdinfo/XXXX03/DAT000003_gea.rufldf.dst.gz"
 )
 
@@ -37,7 +44,7 @@ def test_tax4_vlen_structure():
               "nfold", "detector_ids"]:
         assert data[k].shape[0] == n_hits
 
-    # waveforms consistent with nfold (nfold now comes from the reader)
+    # waveforms consistent with nfold (nfold comes from the reader)
     assert data["time_traces"].shape[0] == n_wf
     assert np.array_equal(np.diff(data["hit_tt_offsets"]), data["nfold"])
 
@@ -47,21 +54,33 @@ def test_tax4_vlen_structure():
     assert np.all(np.isfinite(data["time_traces"]))
 
 
+def test_tax4_detector_ids_swapped():
+    """Both id components must be < 100 for the yyxx->xxyy swap to be valid,
+    on BOTH sub-arrays (they occupy different id ranges)."""
+    for path in (TAX4_DST, TAX4_DST_SOUTH):
+        data = parse_dst_file_tax4_vlen(path)
+        assert data is not None, f"no data from {path}"
+        ids = data["detector_ids"]
+        assert ids.min() > 0
+        assert (ids // 100).max() < 100 and (ids % 100).max() < 100
+
+
 def test_tax4_vlen_format_parity():
-    """TAx4 vlen keys == TA-SD vlen keys, minus the 4 recon fields TAx4 does
-    not compute; TAx4 adds none of its own."""
+    """TAx4 vlen keys == TA-SD vlen keys, exactly.
+
+    Was NOT true while TAx4 went through the TALE reader (it could not emit
+    std_recon_nsclust/nhits/nborder/qtot). With the benMC exe the key sets match.
+    """
     tax4 = parse_dst_file_tax4_vlen(TAX4_DST)
     ta = parse_dst_file_vlen(TA_DST)
-    ta_only = set(ta) - set(tax4)
-    tax4_only = set(tax4) - set(ta)
-    assert tax4_only == set(), f"TAx4 introduced unexpected keys: {tax4_only}"
-    assert ta_only == {
-        "std_recon_nsclust", "std_recon_nhits",
-        "std_recon_nborder", "std_recon_qtot",
-    }, f"unexpected key diff: {ta_only}"
+    assert set(tax4) == set(ta), (
+        f"TA-only: {sorted(set(ta) - set(tax4))}, "
+        f"TAx4-only: {sorted(set(tax4) - set(ta))}"
+    )
 
 
 if __name__ == "__main__":
     test_tax4_vlen_structure()
+    test_tax4_detector_ids_swapped()
     test_tax4_vlen_format_parity()
     print("TAx4 vlen tests PASSED")

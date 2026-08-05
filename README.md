@@ -28,22 +28,26 @@ with h5py.File("out.h5", "a") as f:
 
 ## TAx4 → vlen HDF5 (same format as TA-SD)
 
-TAx4 uses the **same vlen format** as TA-SD via `parse_dst_file_tax4_vlen`. The
-output dict is identical to `parse_dst_file_vlen` except it lacks the four recon
-fields TAx4's reconstruction does not compute
-(`std_recon_nsclust/nhits/nborder/qtot`).
+TAx4 uses the **same vlen format** as TA-SD via `parse_dst_file_tax4_vlen`, and
+the output dict has **exactly the same keys** as `parse_dst_file_vlen`.
 
-**Step 1 — build the TAx4 reader once** (emits `rufptn_.nfold`, which the stock
-TAx4 reader omits; required so hits map to waveforms exactly):
-```bash
-bash tax4_reader_build/build.sh
-```
-This compiles one modified source against the ceph sdanalysis install
-**read-only** (nothing on ceph is changed) and writes the binary to the path in
-`paths.dst_reader_tax4_std_recon_nfold`. See `tax4_reader_build/README.md` for
-details and prerequisites (g++, ROOT).
+**No special reader, no build step.** TAx4 is read with the same benMC exe as
+TA-SD, which emits the full 61-field `#EVENT` record and 12-field `#SD meta`
+including `rufptn_.nfold`. `parse_dst_file_tax4_vlen` is simply
+`parse_dst_file_vlen(..., swap_detector_ids=True)`: TAx4's `#SD meta` block
+prints the detector id as `yyxx` while its waveform block uses `xxyy`, and that
+swap is the only TAx4-specific step in the whole vlen path.
 
-**Step 2a — convert (Python API):**
+> Historical note: an earlier version routed TAx4 through a separate
+> TALE-geometry sdanalysis install plus a locally-rebuilt "nfold" reader. That
+> was unnecessary — the missing `nfold` and the reduced field set were
+> properties of *that reader's* printf, not of TAx4 data. Verified 2026-08-05 by
+> running both exes on 40 TAx4 files (north+south, 976 events): identical event
+> counts, identical `#SD meta`, identical `#EVENT` fields 0–41. Neither exe
+> reconstructs anything — they print the banks already stored in the pass2
+> (`rufldf`) DST file.
+
+**Convert (Python API):**
 ```python
 from dstparser import parse_dst_file_tax4_vlen, append_to_hdf5
 import h5py
@@ -55,7 +59,7 @@ with h5py.File("tax4.h5", "a") as f:
             append_to_hdf5(f, data)
 ```
 
-**Step 2b — convert (production CLI, SLURM):** the vlen pipeline is
+**Convert (production CLI, SLURM):** the vlen pipeline is
 adapter-selectable. In your config set `vlen_adapter = "tax4"` (see
 `examples/config_tax4_vlen.py`), then:
 ```bash

@@ -8,27 +8,40 @@ from dstparser.paths import (
     dst_reader_all_events,
     root_dir_tax4_std_recon,
     dst_reader_tax4_std_recon,
-    dst_reader_tax4_std_recon_nfold,
     sd_analysis_env,
     openssl10_alma9,
     openssl10_rocky_linux,
+    root_env_benmc,
+    root_env_tax4,
 )
+
+
+def _load_env(shell_script, prepend=False):
+    """Source a shell script and copy the path-valued vars it changed into
+    os.environ. With prepend=True, PATH/LD_LIBRARY_PATH are prepended to the
+    current value instead of replacing it (so a second install can be layered
+    on top of the first).
+    """
+    for env_var, path_var in changed_env_paths(str(shell_script)).items():
+        if prepend and env_var in ("PATH", "LD_LIBRARY_PATH") and env_var in os.environ:
+            os.environ[env_var] = f"{path_var}:{os.environ[env_var]}"
+        else:
+            os.environ[env_var] = path_var
 
 
 # Loading environment from "sdanalysis_env.sh"
 sd_analysis_env = str(Path(root_dir) / sd_analysis_env)
-for env_var, path_var in changed_env_paths(sd_analysis_env).items():
-    os.environ[env_var] = path_var
+_load_env(sd_analysis_env)
+# The env script's own `source .../thisroot.sh` line points at the pre-2026-07-24
+# ceph mount and silently does nothing, so ROOT is loaded here explicitly.
+_load_env(root_env_benmc, prepend=True)
 
 # TAx4 standard recon lives in a separate sdanalysis install with its own
 # bin/lib -- load its env the same way, additively (verified 2026-07-20: no
 # binary-name collisions with the benMC install above).
 _tax4_sd_analysis_env = str(Path(root_dir_tax4_std_recon) / sd_analysis_env)
-for env_var, path_var in changed_env_paths(_tax4_sd_analysis_env).items():
-    if env_var in ("PATH", "LD_LIBRARY_PATH") and env_var in os.environ:
-        os.environ[env_var] = f"{path_var}:{os.environ[env_var]}"
-    else:
-        os.environ[env_var] = path_var
+_load_env(_tax4_sd_analysis_env, prepend=True)
+_load_env(root_env_tax4, prepend=True)
 
 # Add path to openssl10 missing libs
 if is_alma_linux():
@@ -74,19 +87,15 @@ def read_dst_file_all_events(dst_filename):
 def read_dst_file_tax4_std_recon(dst_filename):
     # sditerator_add_standard_recon.run from the SEPARATE
     # sdanalysis_2018_TALE_TAx4SingleCT_DM install (built for TAx4/TALE
-    # geometry) -- real LDF-fit + geometry-fit reconstruction. Only emits
-    # events with nofwf>0 (verified 2026-07-20 against
-    # sditerator_cppanalysis_add_standard_recon.cpp:29). The benMC install's
-    # add_standard_recon_v2 rejects TAx4 events entirely; this one does not.
+    # geometry). Only emits events with nofwf>0 (verified 2026-07-20 against
+    # sditerator_cppanalysis_add_standard_recon.cpp:29).
+    #
+    # Used ONLY by the old grid-tile adapter dst_adapter_tax4.py. Do NOT use it
+    # for new work: it prints fewer fields than the benMC exe (42-field #EVENT,
+    # 11-field #SD meta with NO rufptn_.nfold). The earlier claim that "benMC's
+    # add_standard_recon_v2 rejects TAx4 events" is FALSE [disproven 2026-08-05,
+    # method: both exes on the same 40 TAx4 files -> identical event counts and
+    # identical values; benMC additionally emits the full 61 fields + nfold].
+    # Neither exe reconstructs anything: they print the banks already stored in
+    # the pass2 (rufldf) DST file.
     return _run_dst_reader(dst_reader_tax4_std_recon, dst_filename)
-
-
-def read_dst_file_tax4_std_recon_nfold(dst_filename):
-    # Same as read_dst_file_tax4_std_recon, but points at the locally-rebuilt
-    # binary that ALSO prints rufptn_.nfold (12-field #SD meta DATA) and the
-    # free-curvature geometry fit (42-field #EVENT DATA). Use this for the vlen
-    # adapter (dst_adapter_tax4_vlen): with nfold present, hits map to waveforms
-    # unambiguously -- no fold-count inference needed. Runtime deps (ROOT,
-    # openssl10) are already loaded above; libbz2 resolves system-wide. See
-    # paths.dst_reader_tax4_std_recon_nfold for how it was built.
-    return _run_dst_reader(dst_reader_tax4_std_recon_nfold, dst_filename)

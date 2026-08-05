@@ -5,13 +5,15 @@ Run with the dstparser CLI (SLURM):
 or drive the two passes directly (see dstparser README "TAx4" section) for a
 non-SLURM / single-node run.
 
-Prereq: the nfold-emitting TAx4 reader must be built once --
-    bash dstparser/tax4_reader_build/build.sh
-and paths.dst_reader_tax4_std_recon_nfold must point at the built binary.
+No prerequisites: TAx4 is read with the same benMC exe as TA-SD. The only TAx4
+difference in the whole vlen path is the yyxx->xxyy detector-id swap, which
+`vlen_adapter = "tax4"` below selects (parse_dst_file_tax4_vlen).
 """
 from pathlib import Path
 import re
 import numpy as np
+
+from dstparser.paths import ceph_root
 
 # -------------------------
 # ADAPTER
@@ -49,7 +51,7 @@ def add_event_ids(data, filename):
 # -------------------------
 # INPUT
 # -------------------------
-_base = "/ceph/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton"
+_base = f"{ceph_root}/tasdmc_dstbank/tax4/qgsii04proton"
 data_dirs = [
     f"{_base}/north/221101to240124",
     f"{_base}/north/240125to240423",
@@ -61,7 +63,7 @@ data_globs = "DAT*_gea.rufldf.dst.gz"
 # -------------------------
 # OUTPUT
 # -------------------------
-output_dir = "/ceph/work/SATORI/projects/TA-ASIoP/dnn_training_data/2026/07/tax4_qgsii04proton_vlen"
+output_dir = f"{ceph_root}/dnn_training_data/2026/07/tax4_qgsii04proton_vlen"
 
 # pass1: DST -> temp_files/temp_NNNNN.h5 ; pass2: temp -> final_files/final_NNNNN.h5
 temp_ngroups = 400      # ~how many DST files per temp file (tune to file count)

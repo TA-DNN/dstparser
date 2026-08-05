@@ -319,7 +319,7 @@ def detector_readings_flat(dst_file, data, hits, waveforms, badsd=None, add_bads
     # to_nsec = 4002.7691424
 
     # check if number folds from hits equal to number of waveforms
-    if np.sum(hits["rufptn_.nfold"]) != waveforms["rusdraw_.xxyy"].shape:
+    if np.sum(hits["rufptn_.nfold"]) != waveforms["rusdraw_.xxyy"].shape[0]:
         num_bad_wf = int(
             waveforms["rusdraw_.xxyy"].shape[0] - np.sum(hits["rufptn_.nfold"])
         )
@@ -479,6 +479,21 @@ def detector_readings_flat(dst_file, data, hits, waveforms, badsd=None, add_bads
     return data
 
 
+def swap_detector_id(xxyy):
+    """Swap a 2-digit-per-component detector id: yyxx <-> xxyy.
+
+    TAx4's #SD meta block prints the id as yyxx while its #SD waveform block
+    prints xxyy (the TA-SD convention). This is the ONLY field-level difference
+    between TA-SD and TAx4 in the whole vlen path
+    [established, verified 2026-08-05, method: with the swap the untouched TA-SD
+    parser reads TAx4 end-to-end; without it the hits-vs-waveforms assert fires.
+    Both components confirmed < 100 on the north and south sub-arrays].
+    """
+    xxyy = np.asarray(xxyy)
+    assert xxyy.size == 0 or xxyy.max() < 10000, "detector id has >2 digits per component"
+    return (xxyy % 100) * 100 + (xxyy // 100)
+
+
 def parse_dst_file_vlen(
     dst_file,
     xmax_reader=None,
@@ -486,7 +501,13 @@ def parse_dst_file_vlen(
     add_standard_recon=True,
     add_badsd=True,
     config=None,
+    swap_detector_ids=False,
 ):
+    """Parse a DST file into the vlen (flat-arrays-with-offsets) format.
+
+    swap_detector_ids: apply the yyxx->xxyy fix to the #SD meta ids. False for
+        TA-SD, True for TAx4 -- see parse_dst_file_tax4_vlen below.
+    """
 
     if not Path(dst_file).exists():
         print(f"File: {dst_file} doesn't exists")
@@ -497,6 +518,9 @@ def parse_dst_file_vlen(
 
     if events is None:
         return None
+
+    if swap_detector_ids:
+        hits["rufptn_.xxyy"] = swap_detector_id(hits["rufptn_.xxyy"])
 
     # Load xmax info for current dst file
     if xmax_reader is not None:
@@ -518,3 +542,24 @@ def parse_dst_file_vlen(
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
     return data
+
+
+def parse_dst_file_tax4_vlen(dst_file, **kwargs):
+    """TAx4 vlen parser -- parse_dst_file_vlen with the detector-id swap.
+
+    TAx4 needs NO special reader and NO special adapter: the same benMC exe used
+    for TA-SD (sditerator_add_standard_recon_v2.run) reads TAx4 files, emitting
+    the full 61-field #EVENT record and 12-field #SD meta INCLUDING nfold. The
+    sditerator binaries only print the rufptn_/rufldf_/rusdgeom_ banks already
+    stored in the pass2 (rufldf) DST -- they do not reconstruct anything -- so
+    the reader choice cannot change the physics.
+
+    [established, verified 2026-08-05, method: benMC exe vs the TALE-install exe
+    on the same 40 TAx4 files (north+south, 976 events): identical event counts,
+    identical #SD meta lines, identical #EVENT fields 0-41. Then this function vs
+    the previous TALE-based adapter on a real file: 37 shared keys identical in
+    value, 0 lost, 4 gained (std_recon_nhits/nsclust/nborder/qtot, which the TALE
+    reader could not emit). The earlier "benMC rejects TAx4 / TAx4 has no nfold /
+    TAx4 emits only 32 fields" claims were artifacts of the TALE reader's printf.]
+    """
+    return parse_dst_file_vlen(dst_file, swap_detector_ids=True, **kwargs)
