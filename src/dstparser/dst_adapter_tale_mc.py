@@ -32,7 +32,7 @@ Key differences from TASD vlen format:
     Includes GPS rollover correction and SD_TIME_CORRECTION (-0.860 µs).
     The downstream pipeline multiplies by 4000 ns → nanoseconds.
 
-Verified fields [2026-06-03]:
+Fields provided:
   - rusdmc: energy (EeV), theta/phi (rad), corexyz (cm), parttype (CORSIKA ID)
   - rusdraw: nofwf, xxyy, fadc [nofwf,2,128], mip [nofwf,2], fadcav [nofwf,2],
              clkcnt [nofwf], mclkcnt [nofwf]

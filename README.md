@@ -38,15 +38,6 @@ including `rufptn_.nfold`. `parse_dst_file_tax4_vlen` is simply
 prints the detector id as `yyxx` while its waveform block uses `xxyy`, and that
 swap is the only TAx4-specific step in the whole vlen path.
 
-> Historical note: an earlier version routed TAx4 through a separate
-> TALE-geometry sdanalysis install plus a locally-rebuilt "nfold" reader. That
-> was unnecessary — the missing `nfold` and the reduced field set were
-> properties of *that reader's* printf, not of TAx4 data. Verified 2026-08-05 by
-> running both exes on 40 TAx4 files (north+south, 976 events): identical event
-> counts, identical `#SD meta`, identical `#EVENT` fields 0–41. Neither exe
-> reconstructs anything — they print the banks already stored in the pass2
-> (`rufldf`) DST file.
-
 **Convert (Python API):**
 ```python
 from dstparser import parse_dst_file_tax4_vlen, append_to_hdf5

@@ -1,11 +1,8 @@
 """Regression test for the TAx4 vlen path (parse_dst_file_tax4_vlen).
 
-Integration test: needs the ceph TAx4 DST files. It needs NO special reader --
-TAx4 is read with the same benMC exe as TA-SD; parse_dst_file_tax4_vlen is just
-parse_dst_file_vlen with the yyxx->xxyy detector-id swap
-[established, verified 2026-08-05, method: benMC exe vs the TALE-install exe on
-40 TAx4 files (north+south, 976 events) -- identical counts, identical #SD meta,
-identical #EVENT fields 0-41].
+Integration test: needs the shared TAx4 DST files. No special reader -- TAx4 is
+read with the same benMC exe as TA-SD, and parse_dst_file_tax4_vlen is just
+parse_dst_file_vlen with the yyxx->xxyy detector-id swap.
 """
 import numpy as np
 from dstparser import parse_dst_file_tax4_vlen, parse_dst_file_vlen

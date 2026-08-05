@@ -10,8 +10,8 @@ def parse_sdmeta_tax4(sdmeta_list_str):
     """
     #SD meta DATA has 11 fields/hit for BOTH TAx4 readers (printAll and the
     TALE install's add_standard_recon), NOT 12 like TA-SD's own
-    add_standard_recon_v2 -- no `nfold` field is emitted for TAx4 (verified
-    2026-07-20 against sditerator_cppanalysis_printAll.cpp:38-43 and
+    add_standard_recon_v2 -- no `nfold` field is emitted for TAx4
+    (sditerator_cppanalysis_printAll.cpp:38-43 and
     sditerator_cppanalysis_add_standard_recon.cpp:49-54):
         xxyy, isgood, reltime[0], reltime[1], pulsa[0], pulsa[1],
         xyzclf[0], xyzclf[1], xyzclf[2], vem[0], vem[1]
@@ -96,19 +96,12 @@ def raw_event_counts(data, dst_lists):
     Use with the printAll reader (read_dst_file_all_events / dst_lists built
     via parse_dst_string_tax4 on printAll output). printAll's #EVENT DATA line
     has only 11 fields -- truth (0-6, handled by shower_params above) + these
-    raw counts, NO reconstruction fields (verified 2026-07-20 against
-    sditerator_cppanalysis_printAll.cpp). printAll lists EVERY thrown event,
+    raw counts, NO reconstruction fields (sditerator_cppanalysis_printAll.cpp).
+    printAll lists EVERY thrown event,
     triggered or not -- use this path for full per-shower statistics.
 
-    CORRECTION 2026-07-20: an earlier version of this docstring claimed "TAx4
-    has NO standard reconstruction" -- that was wrong, based on testing only
-    the wrong binary. TAx4 DOES have a real standard reconstruction (LDF fit,
-    S800, geometry fit) via a SEPARATE install's add_standard_recon reader --
-    see tax4_std_recon() + read_dst_file_tax4_std_recon() below. This
-    function was previously named `standard_recon` and indexed
-    event_list[7..60] assuming the TA-SD add_standard_recon format; that
-    format does not match either TAx4 reader and the old code would
-    IndexError.
+    For TAx4's real standard reconstruction (LDF fit, S800, geometry fit), see
+    tax4_std_recon() + read_dst_file_tax4_std_recon() below.
     """
     event_list = dst_lists[0]
     data["yymmdd"] = event_list[7]
@@ -127,8 +120,8 @@ def tax4_std_recon(data, dst_lists):
     Use with read_dst_file_tax4_std_recon (the TALE install's
     sditerator_add_standard_recon.run). Real reconstruction, but a SMALLER
     field set than TA-SD's own add_standard_recon_v2 -- only LDF fit +
-    geometry fit + border cuts, no "combined" fit (verified 2026-07-20
-    against sditerator_cppanalysis_add_standard_recon.cpp:31-43). Only events
+    geometry fit + border cuts, no "combined" fit
+    (sditerator_cppanalysis_add_standard_recon.cpp:31-43). Only events
     with rusdraw_.nofwf>0 reach this line at all (C++-side filter).
 
     UNVERIFIED for TAx4 specifically, flagged rather than assumed (do not
@@ -228,7 +221,7 @@ def cut_events(event, wform):
     event = event[:, event[1] > 2]
 
     # Pick corresponding waveforms. For TAx4, waveform data is present for
-    # only a minority of events (~16% in a spot check, 2026-07-20) -- when
+    # only a minority of events (~16% in a spot check) -- when
     # absent it is absent for EVERY hit in that event (all-or-nothing, matches
     # the event-level `nofwf` truth count), not a per-hit data error. Hits
     # without a matching waveform get has_wf=False; their time-trace stays
@@ -433,7 +426,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         # DATA) apply to every hit regardless of waveform availability.
         # Waveform-derived fields (time_traces) are only filled where
         # wf_mask is True -- for TAx4, most events have NO waveform for ANY
-        # of their hits (all-or-nothing per event; verified 2026-07-20), and
+        # of their hits (all-or-nothing per event), and
         # those cells stay at their zero-init rather than being computed
         # from a meaningless placeholder waveform index.
         ix_wf, iy_wf = ixy[0][wf_mask], ixy[1][wf_mask]
@@ -505,8 +498,7 @@ def parse_dst_file_tax4(
     # Reads via sditerator_printAll.run: EVERY thrown event (triggered or
     # not), truth + raw SD data, no reconstruction. For real reconstruction
     # (fewer events -- only nofwf>0), use parse_dst_file_tax4_std_recon
-    # below (verified 2026-07-20: TAx4 DOES have a working std-recon reader,
-    # via a separate install -- corrects an earlier wrong claim in this repo).
+    # below.
     dst_string = read_dst_file_all_events(dst_file)
     dst_lists = parse_dst_string_tax4(dst_string)
 

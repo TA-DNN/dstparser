@@ -32,13 +32,13 @@ def _load_env(shell_script, prepend=False):
 # Loading environment from "sdanalysis_env.sh"
 sd_analysis_env = str(Path(root_dir) / sd_analysis_env)
 _load_env(sd_analysis_env)
-# The env script's own `source .../thisroot.sh` line points at the pre-2026-07-24
-# ceph mount and silently does nothing, so ROOT is loaded here explicitly.
+# The env script's own `source .../thisroot.sh` line points at a stale mount and
+# silently does nothing, so ROOT must be loaded here explicitly.
 _load_env(root_env_benmc, prepend=True)
 
 # TAx4 standard recon lives in a separate sdanalysis install with its own
-# bin/lib -- load its env the same way, additively (verified 2026-07-20: no
-# binary-name collisions with the benMC install above).
+# bin/lib -- load its env the same way, additively (no binary-name collisions
+# with the benMC install above).
 _tax4_sd_analysis_env = str(Path(root_dir_tax4_std_recon) / sd_analysis_env)
 _load_env(_tax4_sd_analysis_env, prepend=True)
 _load_env(root_env_tax4, prepend=True)
@@ -87,15 +87,10 @@ def read_dst_file_all_events(dst_filename):
 def read_dst_file_tax4_std_recon(dst_filename):
     # sditerator_add_standard_recon.run from the SEPARATE
     # sdanalysis_2018_TALE_TAx4SingleCT_DM install (built for TAx4/TALE
-    # geometry). Only emits events with nofwf>0 (verified 2026-07-20 against
-    # sditerator_cppanalysis_add_standard_recon.cpp:29).
+    # geometry). Only emits events with nofwf>0
+    # (sditerator_cppanalysis_add_standard_recon.cpp:29).
     #
-    # Used ONLY by the old grid-tile adapter dst_adapter_tax4.py. Do NOT use it
-    # for new work: it prints fewer fields than the benMC exe (42-field #EVENT,
-    # 11-field #SD meta with NO rufptn_.nfold). The earlier claim that "benMC's
-    # add_standard_recon_v2 rejects TAx4 events" is FALSE [disproven 2026-08-05,
-    # method: both exes on the same 40 TAx4 files -> identical event counts and
-    # identical values; benMC additionally emits the full 61 fields + nfold].
-    # Neither exe reconstructs anything: they print the banks already stored in
-    # the pass2 (rufldf) DST file.
+    # Prints less than the benMC reader above: 42-field #EVENT and 11-field
+    # #SD meta with no rufptn_.nfold. Used only by dst_adapter_tax4.py; the vlen
+    # path reads TAx4 with the benMC reader instead.
     return _run_dst_reader(dst_reader_tax4_std_recon, dst_filename)

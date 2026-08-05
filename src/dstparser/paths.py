@@ -10,12 +10,11 @@ can, say, build sdanalysis locally while the dstbanks stay on shared storage.
     +-- dstbank_root     $DSTPARSER_DSTBANK_ROOT      tasdmc/tasdobs dstbanks
     +-- training_data_root $DSTPARSER_TRAINING_ROOT   dnn_training_data outputs
 
-The mount point has already moved twice (/ceph/sharedfs/work/... ->
-/ceph/work/... -> back to /ceph/sharedfs/work/... in the 2026-07-24 downtime),
-which is why none of these names mention the storage they happen to sit on.
+The mount point has moved more than once, which is why none of these names
+mention the storage they happen to sit on.
 
 Every reader used here is a binary under sdanalysis_root -- nothing has to be
-built locally, including for TAx4 (see the note further down).
+built locally, including for TAx4.
 """
 
 import os
@@ -41,11 +40,10 @@ dst_reader_all_events = "sditerator_printAll.run"
 
 sd_analysis_env = "sdanalysis_env.sh"
 
-# Both sdanalysis_env.sh scripts on shared storage still `source` ROOT from the
-# OLD /ceph/work/... mount, which disappeared in the 2026-07-24 downtime. They
-# are read-only and not ours to edit, so ROOT is set up here explicitly, after
-# the install env, instead. [verified 2026-08-05: without this every reader dies
-# with "libCore.so: cannot open shared object file"]
+# Both sdanalysis_env.sh scripts on shared storage `source` ROOT from a mount
+# that no longer exists, and they are read-only, so ROOT is set up here
+# explicitly after the install env. Without this every reader dies with
+# "libCore.so: cannot open shared object file".
 root_env_benmc = f"{sdanalysis_root}/install/root/bin/thisroot.sh"
 root_env_tax4 = f"{sdanalysis_root}/root/bin/thisroot.sh"
 openssl10_alma9 = f"{sdanalysis_root}/benMC/libs_alma9/openssl10"
@@ -57,17 +55,8 @@ xmax_data_dir_prot = f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603
 
 xmax_data_dir_fe = f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/080417_160603/Em1/"
 
-# TAx4 standard reconstruction lives in a SEPARATE sdanalysis install, built for
-# TAx4/TALE geometry. Its own rufptn.run/rufldf.run pass1/pass2 chain produced a
-# reconstruction: LDF-fit energy, S800, core, geometry-fit direction, border
-# distance.
+# A SEPARATE sdanalysis install built for TAx4/TALE geometry, with its own
+# rufptn.run/rufldf.run pass1/pass2 chain. Used only by dst_adapter_tax4.py --
+# the vlen path reads TAx4 with the benMC reader above.
 root_dir_tax4_std_recon = f"{sdanalysis_root}/sdanalysis_2018_TALE_TAx4SingleCT_DM"
 dst_reader_tax4_std_recon = "sditerator_add_standard_recon.run"
-
-# NOTE (2026-08-05): the TALE reader above is used ONLY by the old grid-tile
-# adapter dst_adapter_tax4.py. The vlen path does NOT need it: TAx4 is read with
-# the same benMC exe as TA-SD (dst_reader above), which emits the full 61-field
-# #EVENT record and 12-field #SD meta including rufptn_.nfold. A locally-rebuilt
-# "nfold" reader used to live here; it turned out to be solving a problem that
-# only the TALE reader had. Removed, with its build tree, on 2026-08-05
-# (ml/trash/2026_08_05_tax4_tale_nfold_reader_and_vlen_fork/).
