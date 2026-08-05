@@ -64,6 +64,10 @@ def _run_dst_reader(dst_reader_process, dst_filename):
 
 
 def read_dst_file(dst_filename):
+    # sditerator_add_standard_recon_v2.run (benMC install): standard
+    # reconstruction, and ONLY events that triggered (rusdraw_.nofwf > 0) --
+    # a small fraction of what the file holds (~1% of thrown events for TA-SD,
+    # ~16% for TAx4). For every thrown event use read_dst_file_all_events below.
     return _run_dst_reader(dst_reader_add_standard_recon, dst_filename)
 
 
