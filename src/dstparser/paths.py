@@ -45,7 +45,6 @@ sd_analysis_env = "sdanalysis_env.sh"
 # explicitly after the install env. Without this every reader dies with
 # "libCore.so: cannot open shared object file".
 root_env_benmc = f"{sdanalysis_root}/install/root/bin/thisroot.sh"
-root_env_tax4 = f"{sdanalysis_root}/root/bin/thisroot.sh"
 openssl10_alma9 = f"{sdanalysis_root}/benMC/libs_alma9/openssl10"
 openssl10_rocky_linux = f"{sdanalysis_root}/benMC/libs_rocky_linux/openssl10"
 
@@ -55,8 +54,3 @@ xmax_data_dir_prot = f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603
 
 xmax_data_dir_fe = f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/080417_160603/Em1/"
 
-# A SEPARATE sdanalysis install built for TAx4/TALE geometry, with its own
-# rufptn.run/rufldf.run pass1/pass2 chain. Used only by dst_adapter_tax4.py --
-# the vlen path reads TAx4 with the benMC reader above.
-root_dir_tax4_std_recon = f"{sdanalysis_root}/sdanalysis_2018_TALE_TAx4SingleCT_DM"
-dst_reader_tax4_std_recon = "sditerator_add_standard_recon.run"

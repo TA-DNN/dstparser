@@ -6,13 +6,10 @@ from dstparser.paths import (
     root_dir,
     dst_reader_add_standard_recon,
     dst_reader_all_events,
-    root_dir_tax4_std_recon,
-    dst_reader_tax4_std_recon,
     sd_analysis_env,
     openssl10_alma9,
     openssl10_rocky_linux,
     root_env_benmc,
-    root_env_tax4,
 )
 
 
@@ -35,13 +32,6 @@ _load_env(sd_analysis_env)
 # The env script's own `source .../thisroot.sh` line points at a stale mount and
 # silently does nothing, so ROOT must be loaded here explicitly.
 _load_env(root_env_benmc, prepend=True)
-
-# TAx4 standard recon lives in a separate sdanalysis install with its own
-# bin/lib -- load its env the same way, additively (no binary-name collisions
-# with the benMC install above).
-_tax4_sd_analysis_env = str(Path(root_dir_tax4_std_recon) / sd_analysis_env)
-_load_env(_tax4_sd_analysis_env, prepend=True)
-_load_env(root_env_tax4, prepend=True)
 
 # Add path to openssl10 missing libs
 if is_alma_linux():
@@ -82,15 +72,3 @@ def read_dst_file_all_events(dst_filename):
     # truth + raw SD/waveform data, no reconstruction fields. Use this for
     # full per-shower statistics including non-triggered throws.
     return _run_dst_reader(dst_reader_all_events, dst_filename)
-
-
-def read_dst_file_tax4_std_recon(dst_filename):
-    # sditerator_add_standard_recon.run from the SEPARATE
-    # sdanalysis_2018_TALE_TAx4SingleCT_DM install (built for TAx4/TALE
-    # geometry). Only emits events with nofwf>0
-    # (sditerator_cppanalysis_add_standard_recon.cpp:29).
-    #
-    # Prints less than the benMC reader above: 42-field #EVENT and 11-field
-    # #SD meta with no rufptn_.nfold. Used only by dst_adapter_tax4.py; the vlen
-    # path reads TAx4 with the benMC reader instead.
-    return _run_dst_reader(dst_reader_tax4_std_recon, dst_filename)
