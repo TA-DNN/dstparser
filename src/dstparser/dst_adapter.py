@@ -226,10 +226,16 @@ def standard_recon(data, dst_lists):
     return data
 
 
-def cut_events(event, wform):
+def cut_events(event, wform, swap_detector_ids=False):
     # ! If the signal > 128 bins it is divided on parts with 128 in each
     # ! The code below takes only first part (waveform) in case if
     # ! the signal consists of several such parts
+
+    if swap_detector_ids:
+        # TAx4 prints the SD id as yyxx; the rest of the pipeline expects xxyy.
+        event[0, :] = ((event[0, :] % 100) * 100 + (event[0, :] // 100)).astype(
+            np.int32
+        )
 
     # 1. Get nfold from ORIGINAL (unfiltered) event array
     nfold_orig = event[11].astype(int)
@@ -273,8 +279,8 @@ def center_tile(event, ntile):
     return ixy0, inside_tile, ixy
 
 
-def tile_normalization(data, ievt):
-    detector_dist = 1200  # meters
+def tile_normalization(data, ievt, detector_dist=1200):
+    # detector_dist [meters]: 1200 for TA-SD, 2080 for TAx4
     height_of_clf = 1370  # meters
     height_extent = 30  # meters, height scatter +-30 from average, z-coordinate norm
 
@@ -314,7 +320,16 @@ def tile_normalization(data, ievt):
     return data
 
 
-def tile_positions(ixy0, tile_size, badsd, data, ievt):
+def tile_positions(
+    ixy0, tile_size, badsd, data, ievt, hits_positions=None, hits_ids=None
+):
+    """Fill the tile's absolute detector positions and per-cell status.
+
+    Positions come from the `tasd_clf.tasdmc_clf` survey table by default. That
+    table covers TA-SD only, so for arrays absent from it (TAx4) pass the hits'
+    own coordinates via hits_positions/hits_ids -- they are read from the DST's
+    rufptn_.xyzclf and cover any array.
+    """
     # Create centered tile
     # n0 = (tile_size - 1) / 2
     to_meters = 1e-2
@@ -326,27 +341,34 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt):
     y += ixy0[1]
     xy_code = x * 100 + y
 
-    # Create mask (:, tile_size, tile_size)
-    masks = tasd_clf.tasdmc_clf[:, 0][:, np.newaxis, np.newaxis] == xy_code
-    tasdmc_clf_indices = np.argmax(masks, axis=0)
+    if hits_positions is None:
+        # Create mask (:, tile_size, tile_size)
+        all_ids = tasd_clf.tasdmc_clf[:, 0]
+        all_pos = tasd_clf.tasdmc_clf[:, 1:]
+    else:
+        all_ids = hits_ids
+        all_pos = hits_positions
+
+    masks = all_ids[:, np.newaxis, np.newaxis] == xy_code
+    indices = np.argmax(masks, axis=0)
     do_exist = masks.any(axis=0)
-    tasdmc_clf_indices = np.where(do_exist, tasdmc_clf_indices, -1)
+    indices = np.where(do_exist, indices, -1)
+
+    cell_ids = all_ids[indices]
+    cell_pos = all_pos[indices]
+    if hits_positions is not None:
+        # index -1 wraps to the last hit; blank those cells out explicitly
+        cell_ids = np.where(do_exist, cell_ids, 0)
+        cell_pos = np.where(do_exist[..., np.newaxis], cell_pos, 0.0)
 
     # Do detectors work:
-    good = ~np.isin(tasd_clf.tasdmc_clf[tasdmc_clf_indices, 0], badsd)
+    good = ~np.isin(cell_ids, badsd)
     status = np.logical_and(good, do_exist)
 
     # Absolute coordinates (relative to central laser facility) in meters
-    data["detector_positions"][ievt, :, :, :] = (
-        tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
-    ) * to_meters
-
-    data["detector_positions_abs"][ievt, :, :, :] = (
-        tasd_clf.tasdmc_clf[tasdmc_clf_indices, 1:]
-    ) * to_meters
-    data["detector_positions_id"][ievt, :, :] = tasd_clf.tasdmc_clf[
-        tasdmc_clf_indices, 0
-    ]
+    data["detector_positions"][ievt, :, :, :] = cell_pos * to_meters
+    data["detector_positions_abs"][ievt, :, :, :] = cell_pos * to_meters
+    data["detector_positions_id"][ievt, :, :] = cell_ids
 
     data["detector_states"][ievt, :, :] = status
     data["detector_exists"][ievt, :, :] = do_exist
@@ -354,7 +376,15 @@ def tile_positions(ixy0, tile_size, badsd, data, ievt):
     return data
 
 
-def detector_readings(data, dst_lists, ntile, avg_traces):
+def detector_readings(
+    data,
+    dst_lists,
+    ntile,
+    avg_traces,
+    swap_detector_ids=False,
+    detector_dist=1200,
+    positions_from_file=False,
+):
     ntime_trace = 128  # number of time trace of waveform
     to_nsec = 4 * 1000
 
@@ -388,7 +418,7 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
         # event.shape = (11, number of detectors)
-        event, wform = cut_events(event, wform)
+        event, wform = cut_events(event, wform, swap_detector_ids=swap_detector_ids)
 
         if event.shape[1] == 0:
             empty_events.append(ievt)
@@ -396,9 +426,21 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
 
         ixy0, inside_tile, ixy = center_tile(event, ntile)
         # Populate absolute detector positions and states
-        data = tile_positions(ixy0, ntile, badsd, data, ievt)
+        if positions_from_file:
+            # rufptn_.xyzclf -> cm (the unit the tasd_clf survey table uses).
+            # NOTE the 1200 here is the xyzclf unit convention, which is the
+            # same for TAx4, and is NOT the array spacing `detector_dist`
+            # (2080 m for TAx4) used by tile_normalization below.
+            xyzclf_unit = 1200.0  # meters
+            hits_cm = (
+                np.vstack([event[6], event[7], event[8]]).T * xyzclf_unit * 100.0
+            )
+            hits_ids = event[0].astype(int)
+        else:
+            hits_cm = hits_ids = None
+        data = tile_positions(ixy0, ntile, badsd, data, ievt, hits_cm, hits_ids)
         # Shift and normalize detector positions and shower cores
-        data = tile_normalization(data, ievt)
+        data = tile_normalization(data, ievt, detector_dist=detector_dist)
 
         # Populate detector readings and arrival times
         wform = wform[:, inside_tile]
@@ -469,7 +511,15 @@ def parse_dst_file(
     add_shower_params=True,
     add_standard_recon=True,
     config=None,
+    swap_detector_ids=False,
+    detector_dist=1200,
+    positions_from_file=False,
 ):
+    """Parse a DST file into the ntile x ntile grid format.
+
+    The last three arguments are the only things that differ between TA-SD and
+    TAx4 -- see parse_dst_file_tax4 below.
+    """
     #  ntile - number of SD per one side
     dst_string = read_dst_file(dst_file)
     dst_lists = parse_dst_string(dst_string)
@@ -489,8 +539,30 @@ def parse_dst_file(
     if add_standard_recon:
         data = standard_recon(data, dst_lists)
 
-    data = detector_readings(data, dst_lists, ntile, avg_traces)
+    data = detector_readings(
+        data,
+        dst_lists,
+        ntile,
+        avg_traces,
+        swap_detector_ids=swap_detector_ids,
+        detector_dist=detector_dist,
+        positions_from_file=positions_from_file,
+    )
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
     return data
+
+
+def parse_dst_file_tax4(dst_file, **kwargs):
+    """TAx4 grid parser -- parse_dst_file with the three TAx4 differences.
+
+    - detector ids are printed yyxx and must be swapped to xxyy
+    - the array spacing is 2080 m, not 1200 m
+    - detector positions come from the file's own rufptn_.xyzclf, because the
+      tasd_clf survey table covers TA-SD only and has no TAx4 counters
+    """
+    kwargs.setdefault("swap_detector_ids", True)
+    kwargs.setdefault("detector_dist", 2080)
+    kwargs.setdefault("positions_from_file", True)
+    return parse_dst_file(dst_file, **kwargs)

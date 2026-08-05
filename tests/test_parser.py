@@ -83,8 +83,17 @@ if __name__ == "__main__":
     # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/tax4/qgsii04proton/north/221101to240124/DAT010019_gea.rufldf.dst.gz"
 
     # dst_file = "/ceph/sharedfs/work/SATORI/projects/TA-ASIoP/tasdmc_dstbank/qgsii04nitrogen/080417_160603/Em1_bsdinfo/DAT081325_gea.rufldf.dst.gz"
-    dst_file = "/home/antonpr/ml1/srecog_experiment/src/srecog/data/cnn/DAT002120_gea.rufldf.dst.gz"
     # !If you want to use TAx4 format, set use_ta_x4=True
     # !If you want to use TA format, set use_ta_x4=False
     # !By default, use_ta_x4=False
+    dst_file = (
+        f"{dstbank_root}/tasdmc_dstbank/qgsii04proton/080417_160603/"
+        "Em1_bsdinfo/XXXX03/DAT000003_gea.rufldf.dst.gz"
+    )
     test_parser(dst_file, print_read_data=True, use_ta_x4=False, add_xmax=False)
+
+    dst_file_tax4 = (
+        f"{dstbank_root}/tasdmc_dstbank/tax4/qgsii04proton/"
+        "north/240125to240423/DAT010611_gea.rufldf.dst.gz"
+    )
+    test_parser(dst_file_tax4, print_read_data=True, use_ta_x4=True, add_xmax=False)
