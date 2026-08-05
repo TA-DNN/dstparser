@@ -340,17 +340,17 @@ def detector_readings(data, dst_lists, ntile, avg_traces):
         fadc_per_vem_low = event[9][inside_tile]
         fadc_per_vem_up = event[10][inside_tile]
 
-        # `nfold` (foldedness) is NOT available for TAx4 -- printAll's #SD meta
-        # DATA has only 11 fields/hit (see parse_sdmeta_tax4), no nfold slot.
-        # data["nfold"] stays at its zero-init.
+        # printAll's #SD meta DATA has 11 fields/hit and no `nfold` slot (see
+        # parse_sdmeta_tax4), so data["nfold"] stays at its zero-init.
 
         # Meta-derived fields (position/signal/arrival time, from #SD meta
         # DATA) apply to every hit regardless of waveform availability.
         # Waveform-derived fields (time_traces) are only filled where
-        # wf_mask is True -- for TAx4, most events have NO waveform for ANY
-        # of their hits (all-or-nothing per event), and
-        # those cells stay at their zero-init rather than being computed
-        # from a meaningless placeholder waveform index.
+        # wf_mask is True. printAll lists every THROWN event and only triggered
+        # ones carry waveforms, so most events here have no waveform for ANY of
+        # their hits (all-or-nothing per event, matching the event-level `nofwf`
+        # count). Those cells stay at their zero-init rather than being computed
+        # from a meaningless placeholder index.
         ix_wf, iy_wf = ixy[0][wf_mask], ixy[1][wf_mask]
 
         if avg_traces:
