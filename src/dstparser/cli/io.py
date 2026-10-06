@@ -1,5 +1,27 @@
 import numpy as np
 import h5py
+from contextlib import contextmanager
+import os
+from pathlib import Path
+import tempfile
+from dstparser.schema import ADDITIONS
+
+
+@contextmanager
+def atomic_output(filename):
+    """Publish a new output only after the whole operation succeeds."""
+    path = Path(filename)
+    if path.exists():
+        raise FileExistsError(path)
+    fd, tmp = tempfile.mkstemp(
+        prefix="." + path.name + ".", suffix=".part", dir=path.parent
+    )
+    os.close(fd)
+    try:
+        yield tmp
+        os.link(tmp, path)
+    finally:
+        os.unlink(tmp)
 
 
 def minimal_uint_type(array):
@@ -88,9 +110,9 @@ def compress_sparse_array(array, np_dtype=np.float16, test_compression=False):
     # from compressed representation
     # requires additional RAM
     if test_compression:
-        assert np.all(
-            restore_sparse_array(data) == array.astype(np_dtype)
-        ), "Bad compression"
+        assert np.all(restore_sparse_array(data) == array.astype(np_dtype)), (
+            "Bad compression"
+        )
     return data
 
 
@@ -127,6 +149,8 @@ def read_h5(filename, ignore=None, restore_fn=restore_sparse_array):
         return data_dict
 
     with h5py.File(filename, "r") as f:
+        if f.attrs.get("dstparser_append_in_progress", False):
+            raise ValueError("Incomplete HDF5 append")
         return recursively_load(f)
 
 
@@ -140,16 +164,19 @@ def save2hdf5(
     for iattempt in range(nattempts):
         with h5py.File(filename, "w") as f:
             for key, value in acc_data.items():
-
                 if isinstance(value, list):
                     value = np.concatenate(value, axis=0)
 
-                if isinstance(value, np.ndarray) and np.issubdtype(
-                    value.dtype, np.floating
+                if (
+                    isinstance(value, np.ndarray)
+                    and np.issubdtype(value.dtype, np.floating)
+                    and key not in ADDITIONS
                 ):
                     value = value.astype(np_dtype)
 
-                if any(key.startswith(s) for s in compress_arrs):
+                if key not in ADDITIONS and any(
+                    key.startswith(s) for s in compress_arrs
+                ):
                     value = compress_sparse_array(value, np_dtype)
 
                 # Write to hdf5 file:
@@ -160,9 +187,14 @@ def save2hdf5(
                     f.create_dataset(f"{key}", data=value)
 
                 del value
+            from dstparser.schema import annotate
+
+            annotate(f, acc_data)
 
         try:
             read_data = read_h5(filename)
             break
         except Exception as ex:
             print(f"Attempt {iattempt + 1} failed with: {ex}")
+    else:
+        raise IOError(f"Could not verify HDF5 output after {nattempts} attempts")

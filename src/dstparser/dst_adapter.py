@@ -226,7 +226,7 @@ def standard_recon(data, dst_lists):
     return data
 
 
-def cut_events(event, wform, swap_detector_ids=False):
+def cut_events(event, wform, swap_detector_ids=False, return_indices=False):
     # ! If the signal > 128 bins it is divided on parts with 128 in each
     # ! The code below takes only first part (waveform) in case if
     # ! the signal consists of several such parts
@@ -239,20 +239,20 @@ def cut_events(event, wform, swap_detector_ids=False):
 
     # 1. Get nfold from ORIGINAL (unfiltered) event array
     nfold_orig = event[11].astype(int)
-    
+
     # 2. Filter by status > 2 FIRST (before matching waveforms)
     status_mask = event[1] > 2
     event = event[:, status_mask]
-    
+
     # 3. Calculate waveform indices: for each filtered hit, find its first waveform
     # Each hit "owns" nfold consecutive waveforms in the original waveform array
     # Compute cumulative sum to find waveform start index for each hit
     wf_starts = np.concatenate(([0], np.cumsum(nfold_orig)[:-1]))
     wf_indices = wf_starts[status_mask]  # First waveform index for each filtered hit
-    
+
     # 4. Select first waveform for each filtered hit
     wform = wform[:, wf_indices]
-    
+
     # 5. Deduplicate: keep only first occurrence of each detector ID
     _, first_indices = np.unique(event[0], return_index=True)
     first_indices.sort()
@@ -260,6 +260,8 @@ def cut_events(event, wform, swap_detector_ids=False):
     event = event[:, first_indices]
     wform = wform[3:, first_indices]  # [3:] removes id, clkcnt, mclkcnt rows
 
+    if return_indices:
+        return event, wform, wf_indices[first_indices]
     return event, wform
 
 
@@ -384,6 +386,7 @@ def detector_readings(
     swap_detector_ids=False,
     detector_dist=1200,
     positions_from_file=False,
+    muon_labels=None,
 ):
     ntime_trace = 128  # number of time trace of waveform
     to_nsec = 4 * 1000
@@ -397,6 +400,10 @@ def detector_readings(
     data["detector_exists"] = np.zeros(shape, dtype=bool)
     data["detector_good"] = np.zeros(shape, dtype=bool)
     data["nfold"] = np.zeros(shape, dtype=np.float32)
+    if muon_labels is not None:
+        from .muon import grid_allocate
+
+        grid_allocate(data, shape, avg_traces)
 
     if avg_traces:
         data["arrival_times"] = np.zeros(shape, dtype=np.float32)
@@ -418,13 +425,25 @@ def detector_readings(
         zip(sdmeta_list, sdwaveform_list, badsdinfo_list)
     ):
         # event.shape = (11, number of detectors)
-        event, wform = cut_events(event, wform, swap_detector_ids=swap_detector_ids)
+        selected = None
+        if muon_labels is not None:
+            event, wform, selected = cut_events(
+                event, wform, swap_detector_ids=swap_detector_ids, return_indices=True
+            )
+        else:
+            event, wform = cut_events(event, wform, swap_detector_ids=swap_detector_ids)
 
         if event.shape[1] == 0:
             empty_events.append(ievt)
             continue
 
         ixy0, inside_tile, ixy = center_tile(event, ntile)
+        if muon_labels is not None:
+            from .muon import grid_fill
+
+            grid_fill(
+                data, ievt, ixy, muon_labels[ievt], selected[inside_tile], avg_traces
+            )
         # Populate absolute detector positions and states
         if positions_from_file:
             # rufptn_.xyzclf -> cm (the unit the tasd_clf survey table uses).
@@ -432,9 +451,7 @@ def detector_readings(
             # same for TAx4, and is NOT the array spacing `detector_dist`
             # (2080 m for TAx4) used by tile_normalization below.
             xyzclf_unit = 1200.0  # meters
-            hits_cm = (
-                np.vstack([event[6], event[7], event[8]]).T * xyzclf_unit * 100.0
-            )
+            hits_cm = np.vstack([event[6], event[7], event[8]]).T * xyzclf_unit * 100.0
             hits_ids = event[0].astype(int)
         else:
             hits_cm = hits_ids = None
@@ -514,6 +531,13 @@ def parse_dst_file(
     swap_detector_ids=False,
     detector_dist=1200,
     positions_from_file=False,
+    include_muon="auto",
+    reconstruction="auto",
+    cache_dir=None,
+    reconstruction_commands=None,
+    reconstruction_dependencies=(),
+    reconstruction_timeout=3600,
+    campaign_manifest=None,
 ):
     """Parse a DST file into the ntile x ntile grid format.
 
@@ -521,7 +545,23 @@ def parse_dst_file(
     TAx4 -- see parse_dst_file_tax4 below.
     """
     #  ntile - number of SD per one side
-    dst_string = read_dst_file(dst_file)
+    from .preparation import inspect_dst, prepare_dst
+    from .muon import enabled, align
+    from .campaign import resolve_manifest
+
+    campaign_manifest = resolve_manifest(dst_file, campaign_manifest)
+    inspection = inspect_dst(dst_file)
+    use_muon = enabled(include_muon, inspection)
+    working = prepare_dst(
+        dst_file,
+        reconstruction,
+        cache_dir,
+        commands=reconstruction_commands,
+        dependencies=reconstruction_dependencies,
+        timeout=reconstruction_timeout,
+        inspection=inspection,
+    )
+    dst_string = read_dst_file(working)
     dst_lists = parse_dst_string(dst_string)
 
     if dst_lists is None:
@@ -529,10 +569,21 @@ def parse_dst_file(
 
     # Load xmax info for current dst file
     if xmax_reader is not None:
-        xmax_reader.read_file(dst_file)
+        from .campaign import init_xmax
+
+        init_xmax(xmax_reader, dst_file, campaign_manifest)
 
     # Dictionary with parsed data
     data = dict()
+    muon_labels = None
+    if use_muon:
+        muon_labels, identity = align(working, dst_lists[2])
+        from .banks import sha256_file
+
+        identity["source_file_sha256"] = np.full(
+            len(muon_labels), sha256_file(dst_file).encode(), dtype="S64"
+        )
+        data.update(identity)
     if add_shower_params:
         data = shower_params(data, dst_lists, xmax_reader)
 
@@ -547,10 +598,15 @@ def parse_dst_file(
         swap_detector_ids=swap_detector_ids,
         detector_dist=detector_dist,
         positions_from_file=positions_from_file,
+        muon_labels=muon_labels,
     )
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
+    if campaign_manifest is not None:
+        from .campaign import add_campaign_metadata
+
+        data = add_campaign_metadata(data, dst_file, campaign_manifest)
     return data
 
 
