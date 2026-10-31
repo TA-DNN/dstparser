@@ -202,9 +202,9 @@ def std_ta_energy_grid():
     # Edges of the bins
     edges = np.concatenate([left_edge, mids[:-1] + widths / 2, right_edge])
     calc_mids = (edges[1:] + edges[:-1]) / 2
-    assert np.allclose(
-        calc_mids, mids
-    ), "Calculated midpoints do not match expected midpoints"
+    assert np.allclose(calc_mids, mids), (
+        "Calculated midpoints do not match expected midpoints"
+    )
     res["edges"] = 10 ** (edges - 18)
     # ta_indx is mapping from TA indexing (including 25) [0, 25] for (1, 20.5)
     # [26, 39] (including 39) for (16.6, 17.9)
@@ -303,6 +303,31 @@ class XmaxReader(ABC):
             raise RuntimeError("Must call read_file() before scaling Xmax")
 
         return self.scaler(energies, mass)
+
+    def read_campaign_file(self, filepath, row):
+        """Use an explicit shower manifest rather than the legacy DAT suffix.
+
+        Campaign Xmax is never silently replaced by a random model draw.
+        xmax_g_cm2, if provided, is already a slant-depth value.
+        """
+        model = {"q": "qgsjetii04", "e": "eposlhc"}.get(row["model"], row["model"])
+        info = {
+            "model": model,
+            "primary": row.get("primary", "proton"),
+            "period": row.get("period"),
+            "shower_id": int(row["tag"][3:]),
+            "bin_id": round(float(row["loge"]) * 10),
+            "file_idx": row["tag"][3:],
+        }
+        value = row.get("xmax_g_cm2")
+        xmax0 = float(value) if value else self._get_xmax0(info)
+        if xmax0 is None or not np.isfinite(xmax0) or xmax0 <= 0:
+            raise ValueError(
+                f"Measured Xmax unavailable for {row['tag']}; supply xmax_g_cm2 or disable Xmax output"
+            )
+        self.scaler = XmaxScaler(
+            model=model, xmax0=xmax0, en0=10 ** (float(row["loge"]) - 18)
+        )
 
 
 class XmaxReaderTxt(XmaxReader):
@@ -468,14 +493,11 @@ def create_xmax_reader(source, **kwargs):
 
 
 if __name__ == "__main__":
-
     # filepath = f"{dstbank_root}/INR_group/cluster82/grisha/tasdmc_EPOS_p/p2/DAT000623.corsika77420.EPOS.tar.gz.spctr1.1745.noCuts.dst.gz"
     # filepath = f"{dstbank_root}/tasdmc_dstbank/qgsii04nitrogen/160604_240422/Em1_bsdinfo/XXXX22/DAT003022_gea.rufldf.dst.gz"
     filepath = f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/160604_240422/Em1_bsdinfo/XXXX13/DAT006413_gea.rufldf.dst.gz"
 
-    rr = XmaxReaderTxt(
-        f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/160604_240422"
-    )
+    rr = XmaxReaderTxt(f"{dstbank_root}/tasdmc_dstbank/qgsii04iron/160604_240422")
     rr.read_file(filepath)
 
     print(rr(np.array([10, 11, 12]), np.array([56, 56, 56])))

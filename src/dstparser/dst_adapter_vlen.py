@@ -327,8 +327,8 @@ def detector_readings_flat(dst_file, data, hits, waveforms, badsd=None, add_bads
         print(
             "Missmatch between hits and waveforms in:\n"
             f"  {dst_file}\n"
-            f'  with n={num_bad_wf} waveform out of {waveforms["rusdraw_.xxyy"].shape[0]} not corresonding to any hit'
-            f' ({num_bad_wf/(waveforms["rusdraw_.xxyy"].shape[0])*100:.6g}%)'
+            f"  with n={num_bad_wf} waveform out of {waveforms['rusdraw_.xxyy'].shape[0]} not corresonding to any hit"
+            f" ({num_bad_wf / (waveforms['rusdraw_.xxyy'].shape[0]) * 100:.6g}%)"
         )
 
         # Compute expected detector IDs from hits
@@ -469,6 +469,11 @@ def detector_readings_flat(dst_file, data, hits, waveforms, badsd=None, add_bads
     data["time_traces"] = (waveforms["rusdraw_.fadc"] / vem).astype(np.float32)
     # Devision of flattened time_traces to events
     data["tt_offsets"] = waveforms["offsets"]
+    from .muon import FIELDS
+
+    for key in FIELDS:
+        if key in waveforms:
+            data[key] = waveforms[key]
 
     # Add badsd (broken/non-operational detectors) for CNN grid format
     if add_badsd and badsd is not None:
@@ -487,7 +492,9 @@ def swap_detector_id(xxyy):
     check in detector_readings_flat fails.
     """
     xxyy = np.asarray(xxyy)
-    assert xxyy.size == 0 or xxyy.max() < 10000, "detector id has >2 digits per component"
+    assert xxyy.size == 0 or xxyy.max() < 10000, (
+        "detector id has >2 digits per component"
+    )
     return (xxyy % 100) * 100 + (xxyy // 100)
 
 
@@ -499,6 +506,13 @@ def parse_dst_file_vlen(
     add_badsd=True,
     config=None,
     swap_detector_ids=False,
+    include_muon="auto",
+    reconstruction="auto",
+    cache_dir=None,
+    reconstruction_commands=None,
+    reconstruction_dependencies=(),
+    reconstruction_timeout=3600,
+    campaign_manifest=None,
 ):
     """Parse a DST file into the vlen (flat-arrays-with-offsets) format.
 
@@ -510,7 +524,23 @@ def parse_dst_file_vlen(
         print(f"File: {dst_file} doesn't exists")
         return None
 
-    dst_string = read_dst_file(dst_file)
+    from .preparation import inspect_dst, prepare_dst
+    from .muon import enabled, align
+    from .campaign import resolve_manifest
+
+    campaign_manifest = resolve_manifest(dst_file, campaign_manifest)
+    inspection = inspect_dst(dst_file)
+    use_muon = enabled(include_muon, inspection)
+    working = prepare_dst(
+        dst_file,
+        reconstruction,
+        cache_dir,
+        commands=reconstruction_commands,
+        dependencies=reconstruction_dependencies,
+        timeout=reconstruction_timeout,
+        inspection=inspection,
+    )
+    dst_string = read_dst_file(working)
     events, hits, waveforms, badsd = parse_dst_string(dst_string)
 
     if events is None:
@@ -521,10 +551,23 @@ def parse_dst_file_vlen(
 
     # Load xmax info for current dst file
     if xmax_reader is not None:
-        xmax_reader.read_file(dst_file)
+        from .campaign import init_xmax
+
+        init_xmax(xmax_reader, dst_file, campaign_manifest)
 
     # Dictionary with parsed data
     data = dict()
+    if use_muon:
+        labels, identity = align(working, waveforms, vlen=True)
+        from .banks import sha256_file
+
+        identity["source_file_sha256"] = np.full(
+            len(identity["source_event_ordinal"]),
+            sha256_file(dst_file).encode(),
+            dtype="S64",
+        )
+        waveforms.update(labels)
+        data.update(identity)
 
     if add_shower_params:
         data = shower_params(data, events, xmax_reader)
@@ -535,9 +578,15 @@ def parse_dst_file_vlen(
     data = detector_readings_flat(
         dst_file, data, hits, waveforms, badsd=badsd, add_badsd=add_badsd
     )
+    if data is None:
+        return None
 
     if (config is not None) and (hasattr(config, "add_event_ids")):
         data = config.add_event_ids(data, dst_file)
+    if campaign_manifest is not None:
+        from .campaign import add_campaign_metadata
+
+        data = add_campaign_metadata(data, dst_file, campaign_manifest)
     return data
 
 
