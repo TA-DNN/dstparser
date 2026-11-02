@@ -315,7 +315,7 @@ The existing `read_dst_file_all_events` text reader remains available.
 ## Tests
 
 ```bash
-pip install -e .[test] pandas    # pandas: needed by the Xmax reader and its test
+pip install -e .[test]
 pytest tests/test_migration.py   # self-contained, no shared storage needed
 pytest tests                     # adds integration tests on real DSTs
 ```

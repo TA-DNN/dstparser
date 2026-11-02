@@ -16,16 +16,14 @@ start: simulation DSTs with muon labels".
 ## Setup and tests
 
 ```bash
-python -m venv venv && venv/bin/pip install -e .[test] pandas
+python -m venv venv && venv/bin/pip install -e .[test]
 venv/bin/python -m dstparser          # which reader paths resolved, and whether they exist
 venv/bin/pytest tests/test_migration.py   # self-contained
 venv/bin/pytest tests                     # integration tests skip without shared storage
 ```
 
-pandas is not in `pyproject.toml` but the Xmax reader and
-`tests/test_parser_xmax.py` import it. The 9 tests in
-`tests/test_migration_real.py` skip unless `DSTPARSER_REGRESSION_BASELINES` or
-`DSTPARSER_CAMPAIGN_ROOT` is set.
+The 9 tests in `tests/test_migration_real.py` skip unless
+`DSTPARSER_REGRESSION_BASELINES` or `DSTPARSER_CAMPAIGN_ROOT` is set.
 
 Importing dstparser sources the sdanalysis environment script and changes
 `PATH` and `LD_LIBRARY_PATH` of the current process.
