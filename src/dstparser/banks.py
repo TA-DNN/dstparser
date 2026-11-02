@@ -157,6 +157,14 @@ class Event:
 
 
 def iter_events(path):
+    """Yield every event of a DST file (plain, gzip or bzip2) as an Event.
+
+    Pure Python, no reconstruction: one Event per stored event, with or
+    without waveforms. Event.raw gives the RUSDRAW waveforms (keys = station
+    xxyy and window index, traces = (n, 2, 128) FADC counts) and Event.muon
+    the MUONEXTR labels in the same row order; either is None when the bank is
+    absent. Raises DSTError on framing, CRC or waveform-alignment errors.
+    """
     banks = None
     ordinal = 0
     for b in iter_banks(path):

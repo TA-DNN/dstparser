@@ -8,7 +8,7 @@
 #
 # Check what actually resolved:
 #
-#   python -m dstparser.paths
+#   python -m dstparser
 
 # The TA project area. Set this alone if everything lives under one root --
 # the three category roots below default to it.

@@ -516,8 +516,34 @@ def parse_dst_file_vlen(
 ):
     """Parse a DST file into the vlen (flat-arrays-with-offsets) format.
 
+    Returns a dict of flat arrays, or None when no event in the file has
+    waveforms. Only events with waveforms are returned, and only waveforms of
+    hits with rufptn isgood > 2; dstparser.banks.iter_events reads every
+    waveform instead. Layer order is lower, upper.
+
     swap_detector_ids: apply the yyxx->xxyy fix to the #SD meta ids. False for
         TA-SD, True for TAx4 -- see parse_dst_file_tax4_vlen below.
+    include_muon: "auto" (default) adds the MUONEXTR labels when any event has
+        the bank; True always adds them (unavailable for legacy MC); False never
+        does; "require" raises unless every event has the bank.
+    reconstruction: "auto" (default) runs rufptn and rufldf on a copy when
+        events with waveforms lack the reconstruction banks; "require" raises
+        instead. The input file is never modified.
+    cache_dir: where reconstructed copies are kept, keyed by input and tool
+        hashes. Default $DSTPARSER_CACHE, else ~/.cache/dstparser. A 10^19 eV
+        shower needs about 0.1 GB and several minutes on the first read.
+    reconstruction_commands: two argument lists with {input} and {output}
+        placeholders that replace the default rufptn.run / rufldf.run calls.
+    reconstruction_dependencies: paths of extra files the commands read
+        (calibration, tables); their hashes become part of the cache key.
+    reconstruction_timeout: seconds allowed per reconstruction stage.
+    campaign_manifest: path of a campaign table (tag, loge, theta_deg, model)
+        that adds shower_log10_energy, shower_zenith_deg, id_corsika_shower,
+        id_energy_bin and id_campaign_model. None (default) looks for a
+        grid.tsv in the resolved input's parent folders; False disables this.
+
+    energy (EeV) is each event's own thrown energy; shower_log10_energy is the
+    shower's nominal value. Use energy as the per-event truth.
     """
 
     if not Path(dst_file).exists():

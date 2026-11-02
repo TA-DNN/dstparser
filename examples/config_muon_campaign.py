@@ -2,9 +2,14 @@
 
 from pathlib import Path
 
-campaign_root = Path("/ceph/sharedfs/work/SATORI/mark/TA_simulation_data")
-campaign_manifest = campaign_root / "grid.tsv"
-cache_dir = campaign_root / "analysis/dstparser_reconstruction_cache"
+# Replace both paths with your own.
+campaign_root = Path("/path/to/campaign")  # folder holding the DSTs
+# Table with tag, loge, theta_deg and model columns (a campaign grid.tsv or
+# manifest.tsv). Omit it to search the DST's parent folders for grid.tsv.
+campaign_manifest = campaign_root / "manifest.tsv"
+# Reconstructed copies of the DSTs, about 0.1 GB per 10^19 eV shower. Must be
+# writable; keep it out of your home folder and out of the campaign inputs.
+cache_dir = Path("/path/with/space/dstparser_cache")
 reconstruction = "auto"
 include_muon = "require"
 reconstruction_timeout = 3600

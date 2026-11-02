@@ -541,8 +541,13 @@ def parse_dst_file(
 ):
     """Parse a DST file into the ntile x ntile grid format.
 
-    The last three arguments are the only things that differ between TA-SD and
-    TAx4 -- see parse_dst_file_tax4 below.
+    swap_detector_ids, detector_dist and positions_from_file are the only
+    things that differ between TA-SD and TAx4 -- see parse_dst_file_tax4 below.
+
+    include_muon, reconstruction, cache_dir, reconstruction_commands,
+    reconstruction_dependencies, reconstruction_timeout and campaign_manifest
+    mean the same as in parse_dst_file_vlen. Grid muon labels follow the first
+    retained waveform window of each station, like the grid traces.
     """
     #  ntile - number of SD per one side
     from .preparation import inspect_dst, prepare_dst
