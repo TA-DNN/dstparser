@@ -21,9 +21,11 @@ dependencies = [
     "tqdm",
     "matplotlib",
     "tables",
+    "pandas",
 ]
 
 [project.optional-dependencies]
+test = ["pytest"]
 docs = [
     "sphinx",
 ]

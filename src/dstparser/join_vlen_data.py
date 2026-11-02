@@ -1,6 +1,27 @@
 import numpy as np
 import json
 from dstparser.paths import dstbank_root
+from dstparser.schema import has_muon, promote, validate, annotate
+
+
+def _harmonize(existing, incoming):
+    incoming = dict(incoming)
+    prior = dict(existing)
+    if has_muon(incoming) or has_muon(prior):
+        incoming = promote(incoming)
+        if prior:
+            prior = promote(prior)
+    validate(incoming)
+    if prior:
+        validate(prior)
+        if set(prior) != set(incoming):
+            raise ValueError(f"Incompatible HDF5 schemas: {set(prior) ^ set(incoming)}")
+        for k, a in incoming.items():
+            if np.shape(a)[1:] != np.shape(prior[k])[1:]:
+                raise ValueError(f"Incompatible shape for {k}")
+            if np.asarray(a).dtype != prior[k].dtype:
+                raise ValueError(f"Incompatible dtype for {k}")
+    return prior, incoming
 
 
 def append_to_memstore(memstore, data_dict):
@@ -21,13 +42,15 @@ def append_to_memstore(memstore, data_dict):
     data_dict : dict[str, array-like]
         New chunk of arrays to append.
     """
+    prior, data_dict = _harmonize(memstore, data_dict)
+    memstore.update(prior)
     for key, array in data_dict.items():
         arr = np.asarray(array)
 
         if "offset" in key:
-            assert (
-                len(arr) > 0 and arr[0] == 0
-            ), f"Offset array '{key}' must start with 0, got {arr[0] if len(arr) > 0 else 'empty array'}"
+            assert len(arr) > 0 and arr[0] == 0, (
+                f"Offset array '{key}' must start with 0, got {arr[0] if len(arr) > 0 else 'empty array'}"
+            )
 
         if key not in memstore:
             memstore[key] = arr.copy()
@@ -58,19 +81,29 @@ def append_to_hdf5(h5file, data_dict):
     data_dict : dict[str, array-like]
         Mapping of dataset names to new data chunks.
     """
+    if h5file.attrs.get("dstparser_append_in_progress", False):
+        raise ValueError("Previous append was interrupted; rebuild this output")
+    infos = {k: v["info"] for k, v in data_dict.items() if isinstance(v, dict)}
+    raw = {k: v["data"] if isinstance(v, dict) else v for k, v in data_dict.items()}
+    prior, data_dict = _harmonize(h5file, raw)
+    h5file.attrs["dstparser_append_in_progress"] = True
+    h5file.flush()
+    for k, a in prior.items():
+        if k not in h5file:
+            h5file.create_dataset(k, data=a, maxshape=(None, *a.shape[1:]), chunks=True)
     for key, array in data_dict.items():
         if isinstance(array, dict):
             arr = array["data"]
             attr = array["info"]
         else:
             arr = array
-            attr = None
+            attr = infos.get(key)
 
         arr = np.asarray(arr)
         if "offset" in key:
-            assert (
-                len(arr) > 0 and arr[0] == 0
-            ), f"Offset array '{key}' must start with 0, got {arr[0] if len(arr) > 0 else 'empty array'}"
+            assert len(arr) > 0 and arr[0] == 0, (
+                f"Offset array '{key}' must start with 0, got {arr[0] if len(arr) > 0 else 'empty array'}"
+            )
 
         if key not in h5file:
             # create a new resizable dataset
@@ -96,6 +129,9 @@ def append_to_hdf5(h5file, data_dict):
                 old = ds.shape[0]
                 ds.resize(old + new_arr.shape[0], axis=0)
                 ds[old : old + new_arr.shape[0]] = new_arr
+    annotate(h5file, data_dict)
+    h5file.attrs["dstparser_append_in_progress"] = False
+    h5file.flush()
 
 
 if __name__ == "__main__":

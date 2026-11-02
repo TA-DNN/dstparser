@@ -3,6 +3,7 @@ from dstparser.dst_adapter import parse_dst_file, parse_dst_file_tax4
 from dstparser.dst_adapter_vlen import parse_dst_file_vlen, parse_dst_file_tax4_vlen
 from dstparser.join_vlen_data import append_to_hdf5
 from dstparser.h5dst.h5dst import H5DST, MultiH5DST
+from dstparser.preparation import prepare_dst, inspect_dst
 
 __version__ = version("dstparser")
 
@@ -20,4 +21,6 @@ __all__ = [
     "plots",
     "paths",
     "__version__",
+    "prepare_dst",
+    "inspect_dst",
 ]

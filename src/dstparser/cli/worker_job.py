@@ -5,7 +5,8 @@ from tqdm.auto import tqdm
 from pathlib import Path
 from dstparser import parse_dst_file
 from dstparser.xmax_reader.xmax_reader import XmaxReaderTxt
-from dstparser.cli.io import read_h5, save2hdf5
+from dstparser.cli.io import read_h5, save2hdf5, atomic_output
+from dstparser.schema import migration_kwargs, has_muon, promote, validate
 from dstparser.cli.slurm import task_info
 from dstparser.cli.data_filters import filter_full_tiles
 from dstparser.cli.cli import parse_config
@@ -57,8 +58,7 @@ def update_xmax_reader(xmax_reader, file):
     parent_dir = Path(file).parent
     if xmax_reader.data_dir != parent_dir:
         glob_pattern = xmax_reader.glob_pattern
-        model = xmax_reader.model
-        xmax_reader = XmaxReader(parent_dir, glob_pattern, model)
+        xmax_reader = XmaxReaderTxt(data_dir=parent_dir, glob_pattern=glob_pattern)
     return xmax_reader
 
 
@@ -103,13 +103,12 @@ def init_xmax_reader(config, init_file=None):
 
 def dst_to_hdf5(ifiles, ofile, config):
 
-    acc_data = dict()
+    chunks = []
     xmax_reader, update_reader = init_xmax_reader(config, init_file=ifiles[0])
 
     for file in tqdm(
         ifiles, total=len(ifiles), desc=f"DST conversion for {Path(ofile).name}"
     ):
-
         if update_reader:
             # Update xmax_reader if the directory of the file changes
             xmax_reader = update_xmax_reader(xmax_reader, file)
@@ -122,6 +121,7 @@ def dst_to_hdf5(ifiles, ofile, config):
             add_shower_params=True,
             add_standard_recon=True,
             config=config,
+            **migration_kwargs(config),
         )
 
         if data is None:
@@ -130,33 +130,46 @@ def dst_to_hdf5(ifiles, ofile, config):
         # Filter data
         # data = filter_full_tiles(data, max_events=50)
 
-        # Distribute by fields
-        for key, value in data.items():
-            acc_data.setdefault(key, []).append(value)
+        chunks.append(data)
+    _save_grid_chunks(chunks, ofile)
 
-    save2hdf5(acc_data, ofile)
+
+def _save_grid_chunks(chunks, ofile):
+    chunks = [d for d in chunks if d]
+    if not chunks:
+        with atomic_output(ofile) as tmp, h5py.File(tmp, "w") as f:
+            f.attrs["dstparser_empty"] = True
+        return
+    if any(has_muon(d) for d in chunks):
+        chunks = [promote(d) for d in chunks]
+    for d in chunks:
+        validate(d)
+    keys = set(chunks[0])
+    if any(set(d) != keys for d in chunks):
+        raise ValueError("Grid chunks have different schemas")
+    acc_data = {k: [d[k] for d in chunks] for k in chunks[0]}
+    with atomic_output(ofile) as tmp:
+        save2hdf5(acc_data, tmp)
 
 
 def join_hdf5(ifiles, ofile, config):
-    acc_data = dict()
+    chunks = []
     for ifile in tqdm(
         ifiles, total=len(ifiles), desc=f"Joining files for {Path(ofile).name}"
     ):
-
         skipped_arrays = None
         if hasattr(config, "skipped_arrays"):
             skipped_arrays = config.skipped_arrays
 
         data = read_h5(ifile)
-        # Distribute by fields
-        for key, value in data.items():
-            if skipped_arrays is not None:
-                # Sometimes we need to skip ["time_traces_low", "time_traces_up"]
-                if key in skipped_arrays:
-                    continue
-            acc_data.setdefault(key, []).append(value)
-
-    save2hdf5(acc_data, ofile)
+        chunks.append(
+            {
+                k: v
+                for k, v in data.items()
+                if skipped_arrays is None or k not in skipped_arrays
+            }
+        )
+    _save_grid_chunks(chunks, ofile)
 
 
 def dst_to_hdf5_vlen(ifiles, ofile, config):
@@ -172,11 +185,10 @@ def dst_to_hdf5_vlen(ifiles, ofile, config):
 
     xmax_reader, update_reader = init_xmax_reader(config, init_file=ifiles[0])
 
-    with h5py.File(ofile, "a") as f:
+    with atomic_output(ofile) as tmp, h5py.File(tmp, "w") as f:
         for file in tqdm(
             ifiles, total=len(ifiles), desc=f"DST conversion for {Path(ofile).name}"
         ):
-
             if update_reader:
                 # Update xmax_reader if the directory of the file changes
                 xmax_reader = update_xmax_reader(xmax_reader, file)
@@ -187,22 +199,27 @@ def dst_to_hdf5_vlen(ifiles, ofile, config):
                 add_shower_params=config.add_shower_params,
                 add_standard_recon=config.add_standard_recon,
                 config=config,
+                **migration_kwargs(config),
             )
 
             if data is None:
                 continue
 
             append_to_hdf5(f, data)
+        if not len(f):
+            f.attrs["dstparser_empty"] = True
 
 
 def join_hdf5_vlen(ifiles, ofile, config):
-    with h5py.File(ofile, "a") as f:
-
+    with atomic_output(ofile) as tmp, h5py.File(tmp, "w") as f:
         for ifile in tqdm(
             ifiles, total=len(ifiles), desc=f"Joining files for {Path(ofile).name}"
         ):
             data = read_h5(ifile)
-            append_to_hdf5(f, data)
+            if data:
+                append_to_hdf5(f, data)
+        if not len(f):
+            f.attrs["dstparser_empty"] = True
 
 
 def worker_job():

@@ -6,6 +6,9 @@ from tqdm.auto import tqdm
 class H5DST:
     def __init__(self, filename):
         self.file = h5py.File(filename, "r")
+        if self.file.attrs.get("dstparser_append_in_progress", False):
+            self.file.close()
+            raise ValueError("Incomplete HDF5 append")
         self._collect_info()
 
     def show(self):
@@ -34,13 +37,21 @@ class H5DST:
                     walk(f"{name}/{key}", obj[key], indent + 1)
             elif isinstance(obj, h5py.Dataset):
                 shape0 = obj.shape[0]
-
-                if shape0 == self.file["arrival_times"].shape[0]:
+                lev = obj.attrs.get("level")
+                if lev == "event" or lev == "offset":
+                    self._data[name[1:]] = obj
+                elif lev == "badsd":
+                    self._data[name[1:]] = HitLevel(self.file["badsd_offsets"], obj)
+                elif lev == "hit":
+                    self._data[name[1:]] = HitLevel(self.file["hit_offsets"], obj)
+                elif lev == "waveform":
+                    self._data[name[1:]] = TTLevel(self.file, name[1:])
+                elif shape0 == self.file["arrival_times"].shape[0]:
                     self._data[name[1:]] = HitLevel(
                         self.file["hit_offsets"], self.file[name[1:]]
                     )
                 elif shape0 == self.file["time_traces"].shape[0]:
-                    self._data[name[1:]] = TTLevel(self.file)
+                    self._data[name[1:]] = TTLevel(self.file, name[1:])
                 else:
                     self._data[name[1:]] = self.file[name[1:]]
 
@@ -80,21 +91,30 @@ class ListWLen(list):
 
 
 class TTLevel:
-    def __init__(self, file):
+    def __init__(self, file, field="time_traces"):
         self.f = file
         self.hit_offsets = self.f["hit_offsets"]
         self.hit_tt_offsets = self.f["hit_tt_offsets"]
         self.nfolds = self.f["nfold"]
-        self.ttraces = self.f["time_traces"]
+        self.ttraces = self.f[field]
 
     def __getitem__(self, idx):
 
-        if isinstance(idx, int):
+        if isinstance(idx, slice):
+            indices = range(*idx.indices(len(self.hit_offsets) - 1))
+            return ListWLen([a for i in indices for a in self[i]])
+        if isinstance(idx, (int, np.integer)):
             event_idx = idx
             hit_idx = None
         elif len(idx) == 2:
             event_idx = idx[0]
             hit_idx = idx[1]
+
+        n = len(self.hit_offsets) - 1
+        if event_idx < 0:
+            event_idx += n
+        if not 0 <= event_idx < n:
+            raise IndexError(event_idx)
 
         start_hit = self.hit_offsets[event_idx]
         end_hit = self.hit_offsets[event_idx + 1]
@@ -117,8 +137,20 @@ class MultiH5DST:
 
         self.filenames = filenames
         self.files = [h5py.File(fn, "r") for fn in filenames]
+        if any(f.attrs.get("dstparser_append_in_progress", False) for f in self.files):
+            for f in self.files:
+                f.close()
+            raise ValueError("Incomplete HDF5 append")
+        active = []
+        for f in self.files:
+            if f.attrs.get("dstparser_empty", False):
+                f.close()
+            else:
+                active.append(f)
+        self.files = active
+        self.filenames = [f.filename for f in active]
 
-        self.event_counts = [f["std_recon_energy"].shape[0] for f in self.files]
+        self.event_counts = [len(f["hit_offsets"]) - 1 for f in self.files]
         self.hit_counts = [f["arrival_times"].shape[0] for f in self.files]
         self.tt_counts = [f["time_traces"].shape[0] for f in self.files]
 
@@ -134,19 +166,21 @@ class MultiH5DST:
         return self.nevents
 
     def _collect_info(self):
-        self._data = dict()
+        from dstparser.schema import level, ADDITIONS
 
-        def walk(name, obj, indent=0):
-            if isinstance(obj, h5py.Group):
-                for key in obj:
-                    walk(f"{name}/{key}", obj[key], indent + 1)
-            elif isinstance(obj, h5py.Dataset):
-                shape0 = obj.shape[0]
-
-                if shape0 == self.files[0]["std_recon_energy"].shape[0]:
-                    self._data[name[1:]] = EventLevel(self, name[1:])
-
-        walk("", self.files[0]["/"], indent=-1)
+        self._data = {}
+        names = sorted(set().union(*(set(f.keys()) for f in self.files)))
+        for name in names:
+            sample = next(f[name] for f in self.files if name in f)
+            if not isinstance(sample, h5py.Dataset):
+                continue
+            if name not in ADDITIONS and any(name not in f for f in self.files):
+                raise ValueError(f"Missing dataset in multi-file input: {name}")
+            lev = sample.attrs.get("level", level(name, "vlen"))
+            if lev in ("hit", "waveform", "badsd"):
+                self._data[name] = MultiRaggedLevel(self, name, lev)
+            elif lev == "event":
+                self._data[name] = EventLevel(self, name)
 
     def keys(self):
         return self._data.keys()
@@ -223,21 +257,43 @@ class EventLevel:
 
     @property
     def shape(self):
-        return (len(self.mdata), *self.mdata.files[0][self.array].shape[1:])
+        sample = next(f[self.array] for f in self.mdata.files if self.array in f)
+        return (len(self.mdata), *sample.shape[1:])
+
+    def _read(self, file, start, stop):
+        if self.array in file:
+            return file[self.array][start:stop]
+        sample = next(f[self.array] for f in self.mdata.files if self.array in f)
+        fill = (
+            b""
+            if sample.dtype.kind == "S"
+            else False
+            if sample.dtype.kind == "b"
+            else -1
+        )
+        return np.full((stop - start, *sample.shape[1:]), fill, dtype=sample.dtype)
 
     def __getitem__(self, event_idx):
         mdata = self.mdata
         array = self.array
-        if isinstance(event_idx, int):
+        if isinstance(event_idx, (int, np.integer)):
+            if event_idx < 0:
+                event_idx += len(mdata)
+            if not 0 <= event_idx < len(mdata):
+                raise IndexError(event_idx)
             file_idx = np.searchsorted(mdata.event_offsets, event_idx + 1) - 1
             local_event = event_idx - mdata.event_offsets[file_idx]
             f = mdata.files[file_idx]
-            return f[array][local_event : local_event + 1]
+            return self._read(f, local_event, local_event + 1)
 
         if isinstance(event_idx, slice):
             start, stop, step = event_idx.indices(mdata.event_offsets[-1])
             if step != 1:
                 raise NotImplementedError("Only step=1 supported")
+
+            if stop <= start:
+                sample = next(f[array] for f in mdata.files if array in f)
+                return np.empty((0, *sample.shape[1:]), dtype=sample.dtype)
 
             f_start = np.searchsorted(mdata.event_offsets, start + 1) - 1
             f_stop = np.searchsorted(mdata.event_offsets, stop) - 1
@@ -246,11 +302,11 @@ class EventLevel:
                 f = mdata.files[f_start]
                 local_start = start - mdata.event_offsets[f_start]
                 local_stop = stop - mdata.event_offsets[f_start]
-                return f[array][local_start:local_stop]
+                return self._read(f, local_start, local_stop)
 
             # spanning multiple files
             total_len = stop - start
-            sample = mdata.files[f_start][array][0:1]
+            sample = next(f[array] for f in mdata.files if array in f)
             out = np.empty((total_len,) + sample.shape[1:], dtype=sample.dtype)
 
             pos = 0
@@ -265,7 +321,59 @@ class EventLevel:
                 if fi == f_stop:
                     local_stop = stop - mdata.event_offsets[fi]
                 if local_start < local_stop:
-                    block = f[array][local_start:local_stop]
+                    block = self._read(f, local_start, local_stop)
                     out[pos : pos + len(block)] = block
                     pos += len(block)
             return out
+
+
+class MultiRaggedLevel:
+    """Read hit/window fields across files, including absent legacy labels."""
+
+    def __init__(self, parent, field, level):
+        self.parent = parent
+        self.field = field
+        self.level = level
+
+    def __getitem__(self, index):
+        if isinstance(index, tuple):
+            event, hit = index
+            return self[event][hit]
+        if isinstance(index, slice):
+            values = [self[i] for i in range(*index.indices(len(self.parent)))]
+            if self.level == "waveform":
+                return ListWLen([v for event in values for v in event])
+            if values:
+                return np.concatenate(values)
+            sample = next(f[self.field] for f in self.parent.files if self.field in f)
+            return np.empty((0, *sample.shape[1:]), dtype=sample.dtype)
+        n = len(self.parent)
+        if index < 0:
+            index += n
+        if not 0 <= index < n:
+            raise IndexError(index)
+        fi = np.searchsorted(self.parent.event_offsets, index, side="right") - 1
+        local = int(index - self.parent.event_offsets[fi])
+        file = self.parent.files[fi]
+        if self.field in file:
+            if self.level == "waveform":
+                return TTLevel(file, self.field)[local]
+            return HitLevel(
+                file["badsd_offsets" if self.level == "badsd" else "hit_offsets"],
+                file[self.field],
+            )[local]
+        sample = next(f[self.field] for f in self.parent.files if self.field in f)
+        fill = (
+            np.nan
+            if sample.dtype.kind == "f"
+            else False
+            if sample.dtype.kind == "b"
+            else -1
+        )
+        start, stop = file["hit_offsets"][local : local + 2]
+        return ListWLen(
+            [
+                np.full((int(nf), *sample.shape[1:]), fill, dtype=sample.dtype)
+                for nf in file["nfold"][start:stop]
+            ]
+        )

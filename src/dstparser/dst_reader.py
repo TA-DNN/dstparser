@@ -54,23 +54,17 @@ if is_rocky_linux():
 
 
 def _run_dst_reader(dst_reader_process, dst_filename):
-    try:
-        process = subprocess.Popen(
-            [dst_reader_process, str(dst_filename).strip()],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            env=os.environ,
+    process = subprocess.run(
+        [dst_reader_process, str(dst_filename).strip()],
+        capture_output=True,
+        text=True,
+        env=os.environ,
+    )
+    if process.returncode:
+        raise RuntimeError(
+            f"DST reader {dst_reader_process} failed ({process.returncode}): {process.stderr[-2000:]}"
         )
-        output, error = process.communicate()
-    except subprocess.CalledProcessError as e:
-        output = e.output
-
-    # If output is empty
-    if len(output) == 0:
-        print(f'dst_reader error:\n"{error}"')
-
-    return output.strip().split("\n")
+    return process.stdout.strip().split("\n")
 
 
 def read_dst_file(dst_filename):
