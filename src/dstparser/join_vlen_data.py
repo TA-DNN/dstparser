@@ -40,7 +40,7 @@ def append_to_memstore(memstore, data_dict):
                 memstore[key] = np.concatenate([memstore[key], arr])
 
 
-def append_to_hdf5(h5file, data_dict):
+def append_to_hdf5(h5file, data_dict, compression=None):
     """
     Add or append all arrays in `data_dict` into the open HDF5 file `h5file`.
 
@@ -57,6 +57,8 @@ def append_to_hdf5(h5file, data_dict):
         An open HDF5 file (mode 'a' or 'r+').
     data_dict : dict[str, array-like]
         Mapping of dataset names to new data chunks.
+    compression : str or None
+        h5py compression filter for newly created datasets (e.g. "lzf"); None = uncompressed.
     """
     for key, array in data_dict.items():
         if isinstance(array, dict):
@@ -81,6 +83,7 @@ def append_to_hdf5(h5file, data_dict):
                 maxshape=maxshape,
                 dtype=arr.dtype,
                 chunks=True,
+                compression=compression,
             )
             if attr is not None:
                 dataset.attrs["info"] = json.dumps(attr)
